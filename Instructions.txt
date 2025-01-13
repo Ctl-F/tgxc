@@ -454,4 +454,4 @@ OPCODES:
 
 0xFFFF Signal and Await Next Queue
 
-//TODO: TileMap and TileSet api
+//(FUTURE) TileMap and TileSet api
