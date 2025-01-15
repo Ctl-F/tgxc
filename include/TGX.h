@@ -114,6 +114,15 @@
 #define TGX_SUCCESS 0
 #define TGX_ERROR  -1
 
+#define TGX_PF_Flag_ErrorMask    0x000000FF
+#define TGX_PF_Flag_ErrorBit     0x00000100
+#define TGX_PF_Flag_SysActiveBit 0x00000200
+#define TGX_PF_Flag_ZeroBit      0x00000400
+#define TGX_PF_Flag_NegBit       0x00000800
+#define TGX_PF_Flag_GraphicsFree 0x00001000
+
+// UPDATE THIS IF ANY NEW INSTRUCTIONS ARE ADDED!!!!!
+#define TGX_OPCODE_COUNT 0x011E
 
 typedef struct {
 	uint8_t* memory_begin;
@@ -122,7 +131,7 @@ typedef struct {
 	uint8_t* rom_end;
 	uint8_t* program_cache_begin;
 	uint8_t* program_cache_end;
-	uint6_t* graphics_cache_begin;
+	uint8_t* graphics_cache_begin;
 	uint8_t* graphics_cache_end;
 	uint8_t* graphics_queue_begin;
 	uint8_t* graphics_queue_end;
@@ -172,12 +181,29 @@ typedef struct {
     PrincipleMemory Memory;
 } TGXContext;
 
+typedef struct {
+	union {
+		uint64_t full_value;
+		struct {
+			uint16_t opcode;
+			union {
+				uint16_t param16;
+				uint8_t params[2];
+			};
+			union {
+				uint8_t ext_params[4];
+				uint32_t const_i32;
+				float const_f32;
+			};
+		};
+	};
+} Instruction;
+
 int init_program_thread(ProgramThread*);
 void destroy_program_thread(ProgramThread*);
 int init_graphics_thread(GraphicsThread*);
 void destroy_graphics_thread(GraphicsThread*);
 
-int program_thread_step(ProgramThread*);
-int program_thread_exec(ProgramThread*);
+int program_thread_exec(TGXContext*);
 
 #endif //TGX_H
