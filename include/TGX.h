@@ -114,12 +114,23 @@
 #define TGX_SUCCESS 0
 #define TGX_ERROR  -1
 
+#define MODE8 0
+#define MODE16 1
+#define MODE32 2
+#define MODE64 3
+
 #define TGX_PF_Flag_ErrorMask    0x000000FF
 #define TGX_PF_Flag_ErrorBit     0x00000100
 #define TGX_PF_Flag_SysActiveBit 0x00000200
 #define TGX_PF_Flag_ZeroBit      0x00000400
 #define TGX_PF_Flag_NegBit       0x00000800
 #define TGX_PF_Flag_GraphicsFree 0x00001000
+
+#define TGX_PF_Shift_ErrorBit 8
+#define TGX_PF_Shift_SysActiveBit 9
+#define TGX_PF_Shift_ZeroBit 10
+#define TGX_PF_Shift_NegBit 11
+#define TGX_PF_Shift_GraphicsFree 12
 
 // UPDATE THIS IF ANY NEW INSTRUCTIONS ARE ADDED!!!!!
 #define TGX_OPCODE_COUNT 0x011E
@@ -165,10 +176,16 @@ typedef struct {
 } Vec4;
 
 typedef struct {
-    Reg32 gp32[REG32_COUNT];
-    Reg64 gp64[REG64_COUNT];
-    Vec4 fpvec[REGVEC4_COUNT];
-    uint64_t int_table[INT_TABLE_COUNT];
+	union {
+		Reg32 gp32[REG32_COUNT];
+		uint16_t gp16[REG32_COUNT * 2];
+	};
+	Reg64 gp64[REG64_COUNT];
+	union {
+		Vec4 vec[REGVEC4_COUNT];
+		float f32[REGVEC4_COUNT * 4];
+	};
+    uint32_t int_table[INT_TABLE_COUNT];
 } ProgramThread;
 
 typedef struct {
@@ -192,6 +209,7 @@ typedef struct {
 			};
 			union {
 				uint8_t ext_params[4];
+				uint16_t ext_params16[2];
 				uint32_t const_i32;
 				float const_f32;
 			};

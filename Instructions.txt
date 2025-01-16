@@ -65,7 +65,7 @@ Instruction Cache (*)      (Implementation Specific size)
 Minimum Base Memory (excluding Instruction Cache): 648kb
 
 Please note that the Stack is going to be the first 4kb of the Program Cache
-The stack can be relocated and resized by modifying the SH and SB registerrs. The stack grows from the HEAD to the BASE, or in otherwords the SH register should always point to a higher address than SB.
+The stack can be relocated and resized by modifying the SH and SB registers. The stack grows from the HEAD to the BASE, or in otherwords the SH register should always point to a higher address than SB.
 
 Instruction Cache, for the sake of simplicity is the only implementation invariable memory block. It should still be attached
 to the principle memory block, but its size is allowed to vary, it can be dynamic, or simply be allocated large enough to load
@@ -83,13 +83,23 @@ provide SysCall codes that the bootloader can use for loading, linking, and othe
 
 Shared ROM must be at minimum 16kb
 
+A Note to Memory Access. All memory addresses accessed by the PU directly are with a base (0) at the Program Cache
+ROM is not directly accessible to the PU. It can be accessed by performing a syscall to copy sections of ROM into RAM
+where it can be accessed.
+One possible implementation of this may be via formula (Address + ROM_SIZE) % (MEMORY_SIZE - ROM_SIZE)
+However in this, memory is actually just indexed from ProgramCacheBase.
 
 0x00000000  NOP
 
 Instruction Encoding 64bit:
 [-------------Instruction Code-------------]
-[CATEGORY] [OPERATION] [------PARAMS-------]   [---------------Extended Params-----------]
+[CATEGORY- OPERATION]  [------PARAMS-------]   [---------------Extended Params-----------]
 [00000000] [00000000]  [00000000] [00000000]   [00000000] [00000000] [00000000] [00000000]
+                        DEST-REG  SOURCE-REG   [                CONST (F)32              ]
+                       [                        CONST48                                  ]
+                                  [             CONST40                                  ]
+                                               [ CONST8 ]
+                                               [     CONST16       ]
 
 CATEGORY:
 0x00  Register Move
@@ -124,19 +134,22 @@ Dereference Params:
     00 20 8D 00  00 04 00 00    mov [SP-4], A
     01 0C 8D 00  00 00 00 04    sub SP, 4
 
+MOV instructions will modify the PF flags Zero and Negative based on the data that was moved.
+This allows users to omit an additional CMP instruction in certain cases.
+
 0x0000      NOP
 0x0001 0x00 Reg32 Move Reg32
 0x0002 0x01 Reg16 Move Reg16
 0x0003 0x02 Reg8 Move Reg8
 
 0x0004 0x03 Reg64 Move Reg64
-0x0005 0x05 SP Alloc // I don't remmeber what this is supposed to be so for now it's a NOP
+0x0005 0x05 SP Alloc // I don't remember what this is supposed to be so for now it's a NOP
 0x0006 0x06 SP Dealloc
-0x0007 0x07 Reg64 Move to TABLE Index Const8
+0x0007 0x07 TBL MOV Reg32 AT Index Const8   // Const8 is ALWAYS stored in the ext-params section. Reg32 will still be stored in the SRC param
 
-0x0008 0x08 Reg64 Move to TABLE Index Reg8
-0x0009 0x09 TABLE to Reg64 Index Const8
-0x000A 0x0A TABLE to Reg64 Index Reg8
+0x0008 0x08 TBL MOV Reg32 AT Index Reg8     // Reg8 is still stored in the DEST param and Reg32 will still be in the SRC param
+0x0009 0x09 Reg32 MOV TBL AT Index Const8
+0x000A 0x0A Reg32 MOV TBL AT Index Reg8
 0x000B 0x0B Reg32 Move Reg64-High
 
 0x000C 0x0C Reg32 Move Reg64-Low
@@ -167,7 +180,7 @@ Dereference Params:
 0x0020 0x20 [Reg32] Mov Reg32
 0x0021 0x21 [Reg32] Mov Reg64
 0x0022 0x22 [Reg32] Mov F32
-0x0023 0x23 [Reg32] Mov [Reg32] MODE: R8
+0x0023 0x23 [Reg32] Mov [Reg32] MODE: Const8
 
 0x0024 0x24 F32 Mov [Reg32]
 0x0025 0x25 [Reg32++] Mov [Reg32++] Mode: Const8
@@ -179,8 +192,8 @@ Dereference Params:
 0x002A 0x2A Reg64 Swap Reg64
 0x002B 0x2B F32 Swap F32
 
-0x002C 0x2C MemCopy From Reg32,Reg32 to Reg32,Reg32 <<
-0x002D 0x2D MemCmp From Reg32,Reg32 to Reg32,Reg32
+0x002C 0x2C MemCopy From Reg32 to Reg32 Count Reg32
+0x002D 0x2D MemCmp Reg32[Result] From Reg32 to Reg32 Count Reg32
 0x002E 0x2E MemClr From Reg32,Reg32 value Reg8
 0x002F 0x2F MemClr From Reg32,Reg32 value Reg16
 
@@ -210,6 +223,12 @@ Dereference Params:
 0x0043 0x43 Store [Reg32], TABLE Entries Reg8 through Reg8
 
 0x0044 0x44 Load TABLE, [Reg32] Entries Reg8 through Reg8
+
+*** CORRECTION ***
+ALL += -= *= /= etc operators that operate BETWEEN REGISTERS
+Are actually 3 parameter operators [DEST] = [SOURCE0] OP [SOURCE1]
+ALL operators between a register and a CONST are 2 parameter operators [DEST] OP [CONST]
+for a true += then the [DEST] and [SOURCE0] will be set to the same index.
 
 [ Integer ALOP ]
 0x0045 0x00 Reg32 += Reg32
