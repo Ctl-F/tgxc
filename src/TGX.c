@@ -1025,234 +1025,432 @@ int program_thread_exec(TGXContext* sys){
 
     TGX_CASE(POP_R8):
     TGX_PROFILE_CALL(POP_R8, 0x003C);
-//#error "Not Implemented"
+
+    REG8(sys, instruction.params[0]) = MEMACCESS(uint8_t, sys, REG32(sys, REG_SP));
+    REG32(sys, REG_SP) += sizeof(uint8_t);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG8(sys, instruction.params[0]), 8);
+
     TGX_PROFILE_END(POP_R8, 0x003C);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(POP_R16):
     TGX_PROFILE_CALL(POP_R16, 0x003D);
-//#error "Not Implemented"
+
+    REG16(sys, instruction.params[0]) = MEMACCESS(uint16_t, sys, REG32(sys, REG_SP));
+    REG32(sys, REG_SP) += sizeof(uint16_t);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG16(sys, instruction.params[0]), 16);
+
     TGX_PROFILE_END(POP_R16, 0x003D);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(POP_R32):
     TGX_PROFILE_CALL(POP_R32, 0x003E);
-//#error "Not Implemented"
+
+    REG32(sys, instruction.params[0]) = MEMACCESS(uint32_t, sys, REG32(sys, REG_SP));
+    REG32(sys, REG_SP) += sizeof(uint32_t);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG32(sys, instruction.params[0]), 32);
+
     TGX_PROFILE_END(POP_R32, 0x003E);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(POP_R64):
     TGX_PROFILE_CALL(POP_R64, 0x003F);
-//#error "Not Implemented"
+
+    REG64(sys, instruction.params[0]) = MEMACCESS(uint64_t, sys, REG32(sys, REG_SP));
+    REG32(sys, REG_SP) += sizeof(uint64_t);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG64(sys, instruction.params[0]), 64);
+
     TGX_PROFILE_END(POP_R64, 0x003F);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(POP_F32):
     TGX_PROFILE_CALL(POP_F32, 0x0040);
-//#error "Not Implemented"
+
+    REGF32(sys, instruction.params[0]) = MEMACCESS(float, sys, REG32(sys, REG_SP));
+    REG32(sys, REG_SP) += sizeof(float);
+    UPDATE_PF_ZERO_NEG_BITS_F(sys, REGF32(sys, instruction.params[0]));
+
     TGX_PROFILE_END(POP_F32, 0x0040);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(PUSH_RARZ):
     TGX_PROFILE_CALL(PUSH_RARZ, 0x0041);
-//#error "Not Implemented"
+
+#define RARZ_NUM 10
+#define RARZ_SIZE RARZ_NUM * sizeof(uint32_t)
+
+    MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)-(sizeof(uint32_t) *  1)) = REG32(sys, REG_RA);
+    MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)-(sizeof(uint32_t) *  2)) = REG32(sys, REG_RB);
+    MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)-(sizeof(uint32_t) *  3)) = REG32(sys, REG_RC);
+    MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)-(sizeof(uint32_t) *  4)) = REG32(sys, REG_RD);
+    MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)-(sizeof(uint32_t) *  5)) = REG32(sys, REG_RE);
+    MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)-(sizeof(uint32_t) *  6)) = REG32(sys, REG_RF);
+    MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)-(sizeof(uint32_t) *  7)) = REG32(sys, REG_RW);
+    MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)-(sizeof(uint32_t) *  8)) = REG32(sys, REG_RX);
+    MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)-(sizeof(uint32_t) *  9)) = REG32(sys, REG_RY);
+    MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)-(sizeof(uint32_t) * 10)) = REG32(sys, REG_RZ);
+
+    REG32(sys, REG_SP) -= RARZ_SIZE; // verify that this is correct and that it's not RARZ_SIZE+1
+
     TGX_PROFILE_END(PUSH_RARZ, 0x0041);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(POP_RZRA):
     TGX_PROFILE_CALL(POP_RZRA, 0x0042);
-//#error "Not Implemented"
+
+    REG32(sys, REG_RZ) = MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)+(sizeof(uint32_t) * 0));
+    REG32(sys, REG_RY) = MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)+(sizeof(uint32_t) * 1));
+    REG32(sys, REG_RX) = MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)+(sizeof(uint32_t) * 2));
+    REG32(sys, REG_RW) = MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)+(sizeof(uint32_t) * 3));
+    REG32(sys, REG_RF) = MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)+(sizeof(uint32_t) * 4));
+    REG32(sys, REG_RE) = MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)+(sizeof(uint32_t) * 5));
+    REG32(sys, REG_RD) = MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)+(sizeof(uint32_t) * 6));
+    REG32(sys, REG_RC) = MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)+(sizeof(uint32_t) * 7));
+    REG32(sys, REG_RB) = MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)+(sizeof(uint32_t) * 8));
+    REG32(sys, REG_RA) = MEMACCESS(uint32_t, sys, REG32(sys, REG_SP)+(sizeof(uint32_t) * 9));
+
+    REG32(sys, REG_SP) += RARZ_SIZE;
+
+#undef RARZ_SIZE
+#undef RARZ_NUM
+
     TGX_PROFILE_END(POP_RZRA, 0x0042);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(MOVR32_TBL_R8_R8):
     TGX_PROFILE_CALL(MOVR32_TBL_R8_R8, 0x0043);
-//#error "Not Implemented"
+
+    memcpy(MEMPTR(void, sys, REG32(sys, instruction.params[0])),
+        (sys->PU.int_table + REG8(sys, instruction.params[1])),
+        REG8(sys, instruction.ext_params[0]));
+
     TGX_PROFILE_END(MOVR32_TBL_R8_R8, 0x0043);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(MOVTBL_R8_R8_AR32):
     TGX_PROFILE_CALL(MOVTBL_R8_R8_AR32, 0x0044);
-//#error "Not Implemented"
+
+    memcpy(sys->PU.int_table + REG8(sys, instruction.params[0]),
+        MEMPTR(void, sys, REG32(sys, instruction.params[1])),
+        REG8(sys, instruction.ext_params[0]));
+
     TGX_PROFILE_END(MOVTBL_R8_R8_AR32, 0x0044);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(ADDR32_R32):
     TGX_PROFILE_CALL(ADDR32_R32, 0x0045);
-//#error "Not Implemented"
+
+    REG32(sys, instruction.params[0]) = REG32(sys, instruction.params[1]) + REG32(sys, instruction.ext_params[0]);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG32(sys, instruction.params[0]), 32);
+
     TGX_PROFILE_END(ADDR32_R32, 0x0045);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(ADDR8_R8):
     TGX_PROFILE_CALL(ADDR8_R8, 0x0046);
-//#error "Not Implemented"
+
+    REG8(sys, instruction.params[0]) = REG8(sys, instruction.params[1]) + REG8(sys, instruction.ext_params[0]);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG8(sys, instruction.params[0]), 8);
+
     TGX_PROFILE_END(ADDR8_R8, 0x0046);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(ADDR16_R16):
     TGX_PROFILE_CALL(ADDR16_R16, 0x0047);
-//#error "Not Implemented"
+
+    REG16(sys, instruction.params[0]) = REG16(sys, instruction.params[1]) + REG16(sys, instruction.ext_params[0]);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG16(sys, instruction.params[0]), 16);
+
     TGX_PROFILE_END(ADDR16_R16, 0x0047);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(ADDR64_R64):
     TGX_PROFILE_CALL(ADDR64_R64, 0x0048);
-//#error "Not Implemented"
+
+    REG64(sys, instruction.params[0]) = REG64(sys, instruction.params[1]) + REG64(sys, instruction.ext_params[0]);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG64(sys, instruction.params[0]), 64);
+
     TGX_PROFILE_END(ADDR64_R64, 0x0048);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(ADDR32_C32):
     TGX_PROFILE_CALL(ADDR32_C32, 0x0049);
-//#error "Not Implemented"
+
+    REG32(sys, instruction.params[0]) = REG32(sys, instruction.params[1]) + instruction.const_i32;
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG32(sys, instruction.params[0]), 32);
+
     TGX_PROFILE_END(ADDR32_C32, 0x0049);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(ADDR8_C8):
     TGX_PROFILE_CALL(ADDR8_C8, 0x004A);
-//#error "Not Implemented"
+
+    REG8(sys, instruction.params[0]) = REG8(sys, instruction.params[1]) + instruction.ext_params[0];
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG8(sys, instruction.params[0]), 8);
+
     TGX_PROFILE_END(ADDR8_C8, 0x004A);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(ADDR16_C16):
     TGX_PROFILE_CALL(ADDR16_C16, 0x004B);
-//#error "Not Implemented"
+
+    REG16(sys, instruction.params[0]) = REG16(sys, instruction.params[1]) + instruction.ext_params16[0];
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG16(sys, instruction.params[0]), 16);
+
     TGX_PROFILE_END(ADDR16_C16, 0x004B);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(ADDR64_C40):
     TGX_PROFILE_CALL(ADDR64_C40, 0x004C);
-//#error "Not Implemented"
+
+    REG64(sys, instruction.params[0]) = REG64(sys, instruction.params[1]) + CONST40(instruction);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG64(sys, instruction.params[0]), 64);
+
     TGX_PROFILE_END(ADDR64_C40, 0x004C);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(SUBR32_R32):
     TGX_PROFILE_CALL(SUBR32_R32, 0x004D);
-//#error "Not Implemented"
+
+    REG32(sys, instruction.params[0]) = REG32(sys, instruction.params[1]) - REG32(sys, instruction.ext_params[0]);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG32(sys, instruction.params[0]), 32);
+
     TGX_PROFILE_END(SUBR32_R32, 0x004D);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(SUBR8_R8):
     TGX_PROFILE_CALL(SUBR8_R8, 0x004E);
-//#error "Not Implemented"
+
+    REG8(sys, instruction.params[0]) = REG8(sys, instruction.params[1]) - REG8(sys, instruction.ext_params[0]);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG8(sys, instruction.params[0]), 8);
+
     TGX_PROFILE_END(SUBR8_R8, 0x004E);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(SUBR16_R16):
     TGX_PROFILE_CALL(SUBR16_R16, 0x004F);
-//#error "Not Implemented"
+
+    REG16(sys, instruction.params[0]) = REG16(sys, instruction.params[1]) - REG16(sys, instruction.ext_params[0]);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG16(sys, instruction.params[0]), 16);
+
     TGX_PROFILE_END(SUBR16_R16, 0x004F);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(SUBR64_R64):
     TGX_PROFILE_CALL(SUBR64_R64, 0x0050);
-//#error "Not Implemented"
+
+    REG64(sys, instruction.params[0]) = REG64(sys, instruction.params[1]) - REG64(sys, instruction.ext_params[0]);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG64(sys, instruction.params[0]), 64);
+
     TGX_PROFILE_END(SUBR64_R64, 0x0050);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(SUBR32_C32):
     TGX_PROFILE_CALL(SUBR32_C32, 0x0051);
-//#error "Not Implemented"
+
+    REG32(sys, instruction.params[0]) = REG32(sys, instruction.params[1]) - instruction.const_i32;
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG32(sys, instruction.params[0]), 32);
+
     TGX_PROFILE_END(SUBR32_C32, 0x0051);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(SUBR8_C8):
     TGX_PROFILE_CALL(SUBR8_C8, 0x0052);
-//#error "Not Implemented"
+
+    REG8(sys, instruction.params[0]) = REG8(sys, instruction.params[1]) - instruction.ext_params[0];
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG8(sys, instruction.params[0]), 8);
+
     TGX_PROFILE_END(SUBR8_C8, 0x0052);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(SUBR16_C16):
     TGX_PROFILE_CALL(SUBR16_C16, 0x0053);
-//#error "Not Implemented"
+
+    REG16(sys, instruction.params[0]) = REG16(sys, instruction.params[1]) - instruction.ext_params16[0];
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG16(sys, instruction.params[0]), 16);
+
     TGX_PROFILE_END(SUBR16_C16, 0x0053);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(SUBR64_C40):
     TGX_PROFILE_CALL(SUBR64_C40, 0x0054);
-//#error "Not Implemented"
+
+    REG64(sys, instruction.params[0]) = REG64(sys, instruction.params[1]) - CONST40(instruction);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG64(sys, instruction.params[0]), 64);
+
     TGX_PROFILE_END(SUBR64_C40, 0x0054);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(MULR32_R32):
     TGX_PROFILE_CALL(MULR32_R32, 0x0055);
-//#error "Not Implemented"
+
+    REG32(sys, instruction.params[0]) = REG32(sys, instruction.params[1]) * REG32(sys, instruction.ext_params[0]);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG32(sys, instruction.params[0]), 32);
+
     TGX_PROFILE_END(MULR32_R32, 0x0055);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(MULR8_R8):
     TGX_PROFILE_CALL(MULR8_R8, 0x0056);
-//#error "Not Implemented"
+
+    REG8(sys, instruction.params[0]) = REG8(sys, instruction.params[1]) * REG8(sys, instruction.ext_params[0]);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG8(sys, instruction.params[0]), 8);
+
     TGX_PROFILE_END(MULR8_R8, 0x0056);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(MULR16_R16):
     TGX_PROFILE_CALL(MULR16_R16, 0x0057);
-//#error "Not Implemented"
+
+    REG16(sys, instruction.params[0]) = REG16(sys, instruction.params[1]) * REG16(sys, instruction.ext_params[0]);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG16(sys, instruction.params[0]), 16);
+
     TGX_PROFILE_END(MULR16_R16, 0x0057);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(MULR64_R64):
     TGX_PROFILE_CALL(MULR64_R64, 0x0058);
-//#error "Not Implemented"
+
+    REG64(sys, instruction.params[0]) = REG64(sys, instruction.params[1]) * REG64(sys, instruction.ext_params[0]);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG64(sys, instruction.params[0]), 64);
+
     TGX_PROFILE_END(MULR64_R64, 0x0058);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(MULR32_C32):
     TGX_PROFILE_CALL(MULR32_C32, 0x0059);
-//#error "Not Implemented"
+
+    REG32(sys, instruction.params[0]) = REG32(sys, instruction.params[1]) * instruction.const_i32;
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG32(sys, instruction.params[0]), 32);
+
     TGX_PROFILE_END(MULR32_C32, 0x0059);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(MULR8_C8):
     TGX_PROFILE_CALL(MULR8_C8, 0x005A);
-//#error "Not Implemented"
+
+    REG8(sys, instruction.params[0]) = REG8(sys, instruction.params[1]) * instruction.ext_params[0];
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG8(sys, instruction.params[0]), 8);
+
     TGX_PROFILE_END(MULR8_C8, 0x005A);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(MULR16_C16):
     TGX_PROFILE_CALL(MULR16_C16, 0x005B);
-//#error "Not Implemented"
+
+    REG16(sys, instruction.params[0]) = REG16(sys, instruction.params[1]) * instruction.ext_params16[0];
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG16(sys, instruction.params[0]), 16);
+
     TGX_PROFILE_END(MULR16_C16, 0x005B);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(MULR64_C40):
     TGX_PROFILE_CALL(MULR64_C40, 0x005C);
-//#error "Not Implemented"
+
+    REG64(sys, instruction.params[0]) = REG64(sys, instruction.params[1]) * CONST40(instruction);
+    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG64(sys, instruction.params[0]), 64);
+
     TGX_PROFILE_END(MULR64_C40, 0x005C);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
+
+
 
     TGX_CASE(DIVR32_R32):
     TGX_PROFILE_CALL(DIVR32_R32, 0x005D);
@@ -1261,12 +1459,16 @@ int program_thread_exec(TGXContext* sys){
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(DIVR8_R8):
     TGX_PROFILE_CALL(DIVR8_R8, 0x005E);
 //#error "Not Implemented"
     TGX_PROFILE_END(DIVR8_R8, 0x005E);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
+
+
 
     TGX_CASE(DIVR16_R16):
     TGX_PROFILE_CALL(DIVR16_R16, 0x005F);
@@ -1275,12 +1477,16 @@ int program_thread_exec(TGXContext* sys){
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(DIVR64_R64):
     TGX_PROFILE_CALL(DIVR64_R64, 0x0060);
 //#error "Not Implemented"
     TGX_PROFILE_END(DIVR64_R64, 0x0060);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
+
+
 
     TGX_CASE(DIVR32_C32):
     TGX_PROFILE_CALL(DIVR32_C32, 0x0061);
@@ -1289,12 +1495,16 @@ int program_thread_exec(TGXContext* sys){
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(DIVR8_C8):
     TGX_PROFILE_CALL(DIVR8_C8, 0x0062);
 //#error "Not Implemented"
     TGX_PROFILE_END(DIVR8_C8, 0x0062);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
+
+
 
     TGX_CASE(DIVR16_C16):
     TGX_PROFILE_CALL(DIVR16_C16, 0x0063);
@@ -1303,12 +1513,16 @@ int program_thread_exec(TGXContext* sys){
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(DIVR64_C40):
     TGX_PROFILE_CALL(DIVR64_C40, 0x0064);
 //#error "Not Implemented"
     TGX_PROFILE_END(DIVR64_C40, 0x0064);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
+
+
 
     TGX_CASE(MODR32_R32):
     TGX_PROFILE_CALL(MODR32_R32, 0x0065);
@@ -1317,12 +1531,16 @@ int program_thread_exec(TGXContext* sys){
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(MODR8_R8):
     TGX_PROFILE_CALL(MODR8_R8, 0x0066);
 //#error "Not Implemented"
     TGX_PROFILE_END(MODR8_R8, 0x0066);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
+
+
 
     TGX_CASE(MODR16_R16):
     TGX_PROFILE_CALL(MODR16_R16, 0x0067);
@@ -1331,12 +1549,16 @@ int program_thread_exec(TGXContext* sys){
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(MODR64_R64):
     TGX_PROFILE_CALL(MODR64_R64, 0x0068);
 //#error "Not Implemented"
     TGX_PROFILE_END(MODR64_R64, 0x0068);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
+
+
 
     TGX_CASE(MODR32_C32):
     TGX_PROFILE_CALL(MODR32_C32, 0x0069);
@@ -1345,12 +1567,16 @@ int program_thread_exec(TGXContext* sys){
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(MODR8_C8):
     TGX_PROFILE_CALL(MODR8_C8, 0x006A);
 //#error "Not Implemented"
     TGX_PROFILE_END(MODR8_C8, 0x006A);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
+
+
 
     TGX_CASE(MODR16_C16):
     TGX_PROFILE_CALL(MODR16_C16, 0x006B);
@@ -1359,12 +1585,16 @@ int program_thread_exec(TGXContext* sys){
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(MODR64_C40):
     TGX_PROFILE_CALL(MODR64_C40, 0x006C);
 //#error "Not Implemented"
     TGX_PROFILE_END(MODR64_C40, 0x006C);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
+
+
 
     TGX_CASE(NEGR32):
     TGX_PROFILE_CALL(NEGR32, 0x006D);
@@ -1373,12 +1603,16 @@ int program_thread_exec(TGXContext* sys){
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(NEGR8):
     TGX_PROFILE_CALL(NEGR8, 0x006E);
 //#error "Not Implemented"
     TGX_PROFILE_END(NEGR8, 0x006E);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
+
+
 
     TGX_CASE(NEGR16):
     TGX_PROFILE_CALL(NEGR16, 0x006F);
@@ -1387,12 +1621,16 @@ int program_thread_exec(TGXContext* sys){
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(NEGR64):
     TGX_PROFILE_CALL(NEGR64, 0x0070);
 //#error "Not Implemented"
     TGX_PROFILE_END(NEGR64, 0x0070);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
+
+
 
     TGX_CASE(INCR32):
     TGX_PROFILE_CALL(INCR32, 0x0071);
@@ -1401,12 +1639,16 @@ int program_thread_exec(TGXContext* sys){
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(INCR8):
     TGX_PROFILE_CALL(INCR8, 0x0072);
 //#error "Not Implemented"
     TGX_PROFILE_END(INCR8, 0x0072);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
+
+
 
     TGX_CASE(INCR16):
     TGX_PROFILE_CALL(INCR16, 0x0073);
@@ -1415,12 +1657,16 @@ int program_thread_exec(TGXContext* sys){
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(INCR64):
     TGX_PROFILE_CALL(INCR64, 0x0074);
 //#error "Not Implemented"
     TGX_PROFILE_END(INCR64, 0x0074);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
+
+
 
     TGX_CASE(DECR32):
     TGX_PROFILE_CALL(DECR32, 0x0075);
@@ -1429,12 +1675,16 @@ int program_thread_exec(TGXContext* sys){
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(DECR8):
     TGX_PROFILE_CALL(DECR8, 0x0076);
 //#error "Not Implemented"
     TGX_PROFILE_END(DECR8, 0x0076);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
+
+
 
     TGX_CASE(DECR16):
     TGX_PROFILE_CALL(DECR16, 0x0077);
@@ -1443,6 +1693,8 @@ int program_thread_exec(TGXContext* sys){
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(DECR64):
     TGX_PROFILE_CALL(DECR64, 0x0078);
 //#error "Not Implemented"
@@ -1450,12 +1702,16 @@ int program_thread_exec(TGXContext* sys){
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
+
+
     TGX_CASE(RBRR32_R32):
     TGX_PROFILE_CALL(RBRR32_R32, 0x0079);
 //#error "Not Implemented"
     TGX_PROFILE_END(RBRR32_R32, 0x0079);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
+
+
 
     TGX_CASE(RBRR8_R8):
     TGX_PROFILE_CALL(RBRR8_R8, 0x007A);

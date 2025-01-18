@@ -220,9 +220,9 @@ This allows users to omit an additional CMP instruction in certain cases.
 0x0040 0x40 Pop F32
 0x0041 0x41 Push RA through RZ
 0x0042 0x42 Pop RZ through RA
-0x0043 0x43 Store [Reg32], TABLE Entries Reg8 through Reg8
+0x0043 0x43 Store [Reg32], TABLE Entries Reg8 COUNT Reg8
 
-0x0044 0x44 Load TABLE, [Reg32] Entries Reg8 through Reg8
+0x0044 0x44 Load TABLE, [Reg32] Entries Reg8 COUN\ Reg8
 
 *** CORRECTION ***
 ALL += -= *= /= etc operators that operate BETWEEN REGISTERS
