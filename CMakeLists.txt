@@ -30,4 +30,4 @@ else()
 endif()
 
 target_link_directories(TGXC PUBLIC ${SDL2_LIBRARIES})
-target_link_libraries(TGXC PUBLIC ${SDL2_LIBRARIES})
+target_link_libraries(TGXC PUBLIC ${SDL2_LIBRARIES} m)

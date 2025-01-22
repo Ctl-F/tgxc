@@ -222,7 +222,7 @@ This allows users to omit an additional CMP instruction in certain cases.
 0x0042 0x42 Pop RZ through RA
 0x0043 0x43 Store [Reg32], TABLE Entries Reg8 COUNT Reg8
 
-0x0044 0x44 Load TABLE, [Reg32] Entries Reg8 COUN\ Reg8
+0x0044 0x44 Load TABLE, [Reg32] Entries Reg8 COUNT Reg8
 
 *** CORRECTION ***
 ALL += -= *= /= etc operators that operate BETWEEN REGISTERS
@@ -363,8 +363,8 @@ for a true += then the [DEST] and [SOURCE0] will be set to the same index.
 0x00AC 0x67 Reg16 = ~Reg16
 0x00AD 0x68 Reg64 = ~Reg64
 
-0x00AE 0x69 Reg32 = Reg32 + Reg32 * Reg32
-0x00AF 0x6A Reg64 = Reg64 + Reg64 * Reg64
+0x00AE 0x69 Reg32 = Reg32 + (Reg32 * Reg32)
+0x00AF 0x6A Reg64 = Reg64 + (Reg64 * Reg64)
 0x00B0 0x6B Reg32 = sqr(Reg32)
 0x00B1 0x6C Reg64 = sqr(Reg64)
 
@@ -426,7 +426,7 @@ for a true += then the [DEST] and [SOURCE0] will be set to the same index.
 
 0x00DE 0x27 Vec4 = Swizzle Vec4 ON Reg16 MASK
 0x00DF 0x28 F32 = Pow(F32, F32)
-0x00E0 0x29 F32 = Log(F32, F32)
+0x00E0 0x29 F32 = Log(F32)
 0x00E1 0x2A F32 = ln(F32)
 
 0x00E2 0x2C F32 = e**(F32)
@@ -505,6 +505,8 @@ for a true += then the [DEST] and [SOURCE0] will be set to the same index.
 0x011B 0x04 GQSI Reg32, Reg32   Graphics Queue Set Instructions from Reg32 to Reg32 (bulk upload of instructions)
 0x011C 0x05 GQPC                Graphics Queue Poll Count
 0x011D 0x06 GQPF                Graphics Queue Poll Free Instructions (how many can I record before the queue is full?)
+
+0x001E      RMOV R32, R32       Raw Move that does not affect PF
 
 
 ------- Graphics Unit ---------
