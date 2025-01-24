@@ -437,6 +437,14 @@ for a true += then the [DEST] and [SOURCE0] will be set to the same index.
 0x00E6 0x30 F32 = abs(F32)
 
 [ Branching ]
+ElseFlag: 0x10
+RegFlag: 0x01
+[ Op Code 16bit] [param0 Reg32] [param1 ElseFlag|RegFlag] [Reg|Const32]
+Note that the Reg is written to the first byte, therefore under common endianess that we plan on supporting
+you could grab the reg as a byte, or as the full const32. If you want to support full cross-platform in this case
+you are allowed to write the reg to the full const32 space and read it as an int32. Which is what this implementation
+does.
+
 0x00E7 0x00 Jmp Reg32
 0x00E8 0x01 Jmp Const32
 0x00E9 0x02 Jz Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
@@ -444,8 +452,8 @@ for a true += then the [DEST] and [SOURCE0] will be set to the same index.
 
 0x00EB 0x04 Jnz Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
 0x00EC 0x05 Jnz Const32
-0x00ED 0x06 Jeq Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
-0x00EE 0x07 Jeq Const32
+0x00ED 0x06 Jz Reg32   No else condition
+0x00EE 0x07 Jnz Reg32  No else condition
 
 0x00EF 0x08 Jgt Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
 0x00F0 0x09 Jgt Const32
@@ -457,8 +465,11 @@ for a true += then the [DEST] and [SOURCE0] will be set to the same index.
 0x00F5 0x0E Jle Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
 0x00F6 0x0F Jle Const32
 
-0x00F7 0x10 Jne Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
-0x00F8 0x11 Jne Const32
+0x00F7 0x10 (nop) **Jne Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
+0x00F8 0x11 (nop) **Jne Const32
+
+0x00F9 - 0x010A are NOPS. Call functionality is handled by jumps, the call family as originally planned is redundant
+
 0x00F9 0x12 Call Reg32
 0x00FA 0x13 Call Const32
 
@@ -485,8 +496,9 @@ for a true += then the [DEST] and [SOURCE0] will be set to the same index.
 0x010B 0x24 Ret
 0x010C 0x25 Hlt
 0x010D 0x26 Int Reg8
-0x010E 0x27 Int Const8
+0x010E 0x27 Int Const8 *** stored in ext_params (can be written as full int32)
 
+TODO: Implement extension port protocol
 0x010F 0x28 Init-EP Reg32
 0x0110 0x29 Init-EP Const32
 0x0111 0x2A Invoke-EP Reg32
@@ -495,9 +507,10 @@ for a true += then the [DEST] and [SOURCE0] will be set to the same index.
 0x0113 0x2C Deinit-EP Reg32
 0x0114 0x2D Deinit-EP Const32
 0x0115 0x2E SysCall Const32
-0x0116 0x2F Break **Acts as a breakpoint**
+0x0116 0x2F Break **Acts as a breakpoint** TODO: implement break point.
 
 [ Memory Control ]
+TODO: Implement graphics API
 0x0117 0x00 GQPS                Graphics Queue Poll Status, sets the Program Flag equality bit if the GQ and GC are free for recording
 0x0118 0x01 GQS                 Graphics Queue Submit, set the availability of the GQ to false and trigger GP for rendering
 0x0119 0x02 GQAI                Graphics Queue Add Instruction, add an instruction from registers and increment queue pointer

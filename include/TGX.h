@@ -132,8 +132,11 @@
 #define TGX_PF_Shift_NegBit 11
 #define TGX_PF_Shift_GraphicsFree 12
 
+#define TGX_JMP_ELSE_FLAG 0x10
+#define TGX_JMP_USE_REG_FLAG 0x01
+
 // UPDATE THIS IF ANY NEW INSTRUCTIONS ARE ADDED!!!!!
-#define TGX_OPCODE_COUNT 0x011E
+#define TGX_OPCODE_COUNT 0x011F
 
 typedef struct {
 	uint8_t* memory_begin;
