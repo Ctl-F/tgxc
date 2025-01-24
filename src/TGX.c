@@ -45,7 +45,7 @@ void free_principle_memory(PrincipleMemory* mem){
     *mem = (PrincipleMemory){0};
 }
 
-int init_program_thread(ProgramThread* pu){
+int init_program_thread(ProgramThread* pu) {
     // enable the pu
     pu->gp32[REG_PF].full = TGX_PF_Flag_SysActiveBit;
     return TGX_SUCCESS;
@@ -96,7 +96,7 @@ static uint64_t ProfilerTimestamp_Start_, ProfilerTimestamp_End_;
 #define TGX_PROFILE_REPORT(file) do { FILE *__pfr = fopen(file, "w");  \
     if(__pfr != NULL) { \
         for(size_t i=0; i<TGX_OPCODE_COUNT; i++) { \
-            fprintf(__pfr, "%s[%lx]| Calls, Total Time, Avg Time: %lud, %lud, %f\n", ProfilerTable_[i].name, i, ProfilerTable_[i].calls, ProfilerTable_[i].total_time, (float)ProfilerTable_[i].total_time / (float)ProfilerTable_[i].calls); \
+            fprintf(__pfr, "%15s[%4lX]| Calls, Total Time, Avg Time: %9lu, %9lu, %f\n", ProfilerTable_[i].name, i, ProfilerTable_[i].calls, ProfilerTable_[i].total_time, (float)ProfilerTable_[i].total_time / (float)ProfilerTable_[i].calls); \
         } \
         fclose(__pfr); \
     } } while(false)
@@ -242,6 +242,7 @@ int program_thread_exec(TGXContext* sys){
     // TODO: Graphics API
     Instruction instruction;
 
+    TGX_DISPATCH(_jTable, instruction, *sys);
 
     TGX_CASE(NOP):
     TGX_PROFILE_CALL(NOP, 0x0000);
@@ -3709,7 +3710,9 @@ int program_thread_exec(TGXContext* sys){
 
     TGX_CASE(SYSCALLC32):
     TGX_PROFILE_CALL(SYSCALLC32, 0x0115);
-//#error "Not Implemented"
+
+    REG32(sys, REG_RA) = sys->SWIFunc(sys, instruction.const_i32);
+
     TGX_PROFILE_END(SYSCALLC32, 0x0115);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);

@@ -27,6 +27,7 @@
 
 #include <SDL2/SDL.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -138,6 +139,8 @@
 // UPDATE THIS IF ANY NEW INSTRUCTIONS ARE ADDED!!!!!
 #define TGX_OPCODE_COUNT 0x011F
 
+
+
 typedef struct {
 	uint8_t* memory_begin;
 	uint8_t* memory_end;
@@ -195,10 +198,13 @@ typedef struct {
 
 } GraphicsThread;
 
+typedef uint32_t(*TGX_swi_handler)(void* tgxContext, uint32_t code);
+
 typedef struct {
     ProgramThread PU;
     GraphicsThread GU;
     PrincipleMemory Memory;
+	TGX_swi_handler SWIFunc;
 } TGXContext;
 
 typedef struct {

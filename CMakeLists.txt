@@ -31,3 +31,7 @@ endif()
 
 target_link_directories(TGXC PUBLIC ${SDL2_LIBRARIES})
 target_link_libraries(TGXC PUBLIC ${SDL2_LIBRARIES} m)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -march=native")
+endif()
