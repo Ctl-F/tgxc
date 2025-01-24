@@ -22,6 +22,7 @@ PF Flag Masks
 00000000 00000000 00001000 00000000   Negative Bit (was last operation negative)
 00000000 00000000 00010000 00000000   Graphics Queue Available for Writing
 
+TODO: Implement Error codes
 
 
 // Verified: Low byte comes first, then high byte
@@ -143,8 +144,8 @@ This allows users to omit an additional CMP instruction in certain cases.
 0x0003 0x02 Reg8 Move Reg8
 
 0x0004 0x03 Reg64 Move Reg64
-0x0005 0x05 SP Alloc // I don't remember what this is supposed to be so for now it's a NOP
-0x0006 0x06 SP Dealloc
+0x0005 0x05 mov [Reg32], const_32
+0x0006 0x06 mov [Reg32], const_8
 0x0007 0x07 TBL MOV Reg32 AT Index Const8   // Const8 is ALWAYS stored in the ext-params section. Reg32 will still be stored in the SRC param
 
 0x0008 0x08 TBL MOV Reg32 AT Index Reg8     // Reg8 is still stored in the DEST param and Reg32 will still be in the SRC param
@@ -364,7 +365,7 @@ for a true += then the [DEST] and [SOURCE0] will be set to the same index.
 0x00AD 0x68 Reg64 = ~Reg64
 
 0x00AE 0x69 Reg32 = Reg32 + (Reg32 * Reg32)
-0x00AF 0x6A Reg64 = Reg64 + (Reg64 * Reg64)
+0x00AF 0x6A F32   = F32 + (F32 * F32)
 0x00B0 0x6B Reg32 = sqr(Reg32)
 0x00B1 0x6C Reg64 = sqr(Reg64)
 
@@ -447,10 +448,10 @@ does.
 
 0x00E7 0x00 Jmp Reg32
 0x00E8 0x01 Jmp Const32
-0x00E9 0x02 Jz Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
+0x00E9 0x02 Jz Reg32 [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
 0x00EA 0x03 Jz Const32
 
-0x00EB 0x04 Jnz Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
+0x00EB 0x04 Jnz Reg32 [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
 0x00EC 0x05 Jnz Const32
 0x00ED 0x06 Jz Reg32   No else condition
 0x00EE 0x07 Jnz Reg32  No else condition

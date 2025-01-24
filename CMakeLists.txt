@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.25)
-project(TGXC C)
+project(tgxc C)
 
 find_package(SDL2 REQUIRED)
 
-include_directories(TGXC PUBLIC ${SDL2_INCLUDE_DIRS} include)
+include_directories(tgxc PUBLIC ${SDL2_INCLUDE_DIRS} include)
 
 set(CMAKE_C_STANDARD 11)
 
-add_executable(TGXC src/main.c
+add_executable(tgxc src/main.c
         include/TGX.h
         src/TGX.c)
 
@@ -29,9 +29,7 @@ else()
 
 endif()
 
-target_link_directories(TGXC PUBLIC ${SDL2_LIBRARIES})
-target_link_libraries(TGXC PUBLIC ${SDL2_LIBRARIES} m)
+target_link_directories(tgxc PUBLIC ${SDL2_LIBRARIES})
+target_link_libraries(tgxc PUBLIC ${SDL2_LIBRARIES} m)
 
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -march=native")
-endif()
+add_subdirectory(tgas)

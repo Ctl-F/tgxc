@@ -79,9 +79,9 @@
 #define REG_RZH 0x13
 #define REG16_COUNT 0x14
 
-// 8 bit register indices correspond EXACTLY wwith the 
+// 8 bit register indices correspond EXACTLY with the
 // 32 bit registers they take part of. They are limited to
-// RAS through RZS however.
+// RAS through RZS.
 #define REG8_COUNT 0x0A
 #define REG64_COUNT 0x02
 
@@ -93,9 +93,17 @@
 #define REG_FY1 0x05
 #define REG_FZ1 0x06
 #define REG_FW1 0x07
+#define REG_FX2 0x08
+#define REG_FY2 0x09
+#define REG_FZ2 0x0A
+#define REG_FW2 0x0B
+#define REG_FX3 0x0C
+#define REG_FY3 0x0D
+#define REG_FZ3 0x0E
+#define REG_FW3 0x0F
 
-#define REGF32_COUNT 0x08
-#define REGVEC4_COUNT 0x02
+#define REGF32_COUNT 0x10
+#define REGVEC4_COUNT 0x04
 
 #define INT_TABLE_COUNT 256
 

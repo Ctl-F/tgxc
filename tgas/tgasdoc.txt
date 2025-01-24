@@ -1,0 +1,404 @@
+TG Assembler Documentation
+
+An assembly program consists of up to 2 sections:
+
+$section prog
+$section data
+
+Within the prog section lines consist of the following outline:
+[LabelDef:] [Operation] [Params...]
+
+A LabelDef with no operation is allowed.
+Operations without a LabelDef are also allowed
+
+
+Within the data section lines consist of the following:
+[LabelDef:] [Allocator Specifier] [Data Initializer]
+
+Register Table:
+    ID      Name     Width(bytes)       Type
+    00      ra       4                  int, gp (general purpose)
+    01      rb       4                  int, gp
+    02      rc       4                  int, gp
+    03      rd       4                  int, gp
+    04      re       4                  int, gp
+    05      rf       4                  int, gp
+    06      rw       4                  int, gp
+    07      rx       4                  int, gp
+    08      ry       4                  int, gp
+    09      rz       4                  int, gp
+    0A      ip       4                  int, Instruction Pointer
+    0B      jr       4                  int, Jump Register (stores return address after jump)
+    0C      sb       4                  int, Stack Base (Stack can be relocated and resized by writing to the SB, SP, SH. Stack grows SH to SB)
+    0D      sp       4                  int, Stack Pointer
+    0E      sh       4                  int, Stack Head
+    0F      pf       4                  int, Program Flags (Flags regarding program state like the Neg Bit, Zero Bit, and Active Flag)
+    10      ri       4                  int, gp
+    11      rj       4                  int, gp
+    12      rk       4                  int, gp
+    13      rl       4                  int, gp
+    00      ral      2                  int, gp, lower half of ra
+    01      rah      2                  int, gp, upper half of ra
+    02      rbl      2                  int, gp, lower half of rb
+    03      rbh      2                  int, gp, upper half of rb
+    04      rcl      2                  int, gp, lower half of rc
+    05      rch      2                  int, gp, upper half of rc
+    06      rdl      2                  int, gp, lower half of rd
+    07      rdh      2                  int, gp, upper half of rd
+    08      rel      2                  int, gp, lower half of re
+    09      reh      2                  int, gp, upper half of re
+    0A      rfl      2                  int, gp, lower half of rf
+    0B      rfh      2                  int, gp, upper half of rf
+    0C      rwl      2                  int, gp, lower half of rw
+    0D      rwh      2                  int, gp, upper half of rw
+    0E      rxl      2                  int, gp, lower half of rx
+    0F      rxh      2                  int, gp, upper half of rx
+    10      ryl      2                  int, gp, lower half of ry
+    11      ryh      2                  int, gp, upper half of ry
+    12      rzl      2                  int, gp, lower half of rz
+    13      rzh      2                  int, gp, upper half of rz
+    00      ras      1                  int, gp, lowest byte of ra
+    01      rbs      1                  int, gp, lowest byte of rb
+    02      rcs      1                  int, gp, lowest byte of rc
+    03      rds      1                  int, gp, lowest byte of rd
+    04      res      1                  int, gp, lowest byte of re
+    05      rfs      1                  int, gp, lowest byte of rf
+    06      rws      1                  int, gp, lowest byte of rw
+    07      rxs      1                  int, gp, lowest byte of rx
+    08      rys      1                  int, gp, lowest byte of ry
+    09      rzs      1                  int, gp, lowest byte of rz
+    00      m0       8                  int, gp
+    01      m1       8                  int, gp
+    **      m0l      4                  int, not general purpose per-se. Is used to read/write to half of m0
+    **      m0h      4                  int, not general purpose per-se. Is used to read/write to half of m0
+    **      m1l      4                  int, not general purpose per-se. Is used to read/write to half of m1
+    **      m1h      4                  int, not general purpose per-se. Is used to read/write to half of m1
+    00      fx0      4                  float, gp
+    01      fy0      4                  float, gp
+    02      fz0      4                  float, gp
+    03      fw0      4                  float, gp
+    04      fx1      4                  float, gp
+    05      fy1      4                  float, gp
+    06      fz1      4                  float, gp
+    07      fw1      4                  float, gp
+    08      fx2      4                  float, gp
+    09      fy2      4                  float, gp
+    0A      fz2      4                  float, gp
+    0B      fw2      4                  float, gp
+    0C      fx3      4                  float, gp
+    0D      fy3      4                  float, gp
+    0E      fz3      4                  float, gp
+    0F      fw3      4                  float, gp
+    00      vec0     16                 the combination of fx0 through fw0, used as a vec4
+    01      vec1     16                 the combination of fx1 through fw1, used as a vec4
+    02      vec2     16                 the combination of fx2 through fw2, used as a vec4
+    03      vec3     16                 the combination of fx3 through fw3, used as a vec4
+
+**: These aren't written directly as unique opcodes beyond which 64bit register is selected. The high/low
+bit is determined by opcode emitted
+
+Comments:
+    Single line comments are semicolon to the end of the line.
+    Multi line comments may or may not be supported by particular implementation of the assembler but if supported they
+    should follow c-syntax /* */
+
+ADDRESS SPACE is 32 bit. All Addresses [] are expected to be Reg32
+
+Instructions: (Follow [dest], [source] syntax)
+nop;
+    No Operation. This will emit a nop instruction, as this will effectively waste a dispatch cycle usage of this
+    should be limited outside of specific purposes
+
+mov dest, src;
+    Move the value of src into destination. The exact opcode emitted depends on the size and type of the registers
+    specified. Move will affect program flags allowing for conditional jumping after move and allowing you to avoid
+    redundant cmp commands.
+
+    SRC is allowed to be a constant value. Depending on the size of the destination it will either be an Int8, Int16,
+    Int32, Int48, or Float32. True Int64 constants can only be loaded in 2 phases using either bitwise combinations
+    or by loading the high/low parts into 32 bit registers, and then transferring to the high/low parts of 64bit registers
+
+    Currently (As of Version 1) writing/reading directly to/from memory is unsupported by the vm. This will be added in
+    future versions. To read and write to memory you must move the address into a register and then dereference the register:
+
+        mov ra, my_var
+        mov rb, 42
+        mov [ra], rb
+
+    Memory can be transferred directly between two dereferenced addresses:
+        mov <size> [ra], [rb]
+
+    There are two additional variants:
+
+        movia <size> [reg32], [reg32]   increments regs by the width of the size   stands for "move increment address"
+        movda <size> [reg32], [reg32]   decrements regs by the width of the size   stands for "move decrement address"
+
+    When writing a constant to memory directly there are only 3 allowed types: i32, i8, f32
+    Note that when writing a f32 it will use the i32 instruction and just write the float reinterpreted as an i32.
+
+        mov <size> [addr], const
+
+    Note than when writing constants to memory directly like this does not update the PF
+
+    Future Features: dereference memory directly
+                   : Dereference with offset [ra + rb]
+
+    Interrupt Table Moves:
+
+    Notate Table move with tbl:reg8
+        mov rb, tbl:ras
+        mov tbl:ras, rb
+
+    Data Casting:
+        casting between different sizes of integers is done merely by accessing the higher/lower size registers of the
+        integer. 16-bit integers are merely parts of the larger 32bit register and 8 bit registers are the lower bit of
+        the larger 32-bit register. 64 bit registers are separate from the 32bit register, but can be read/written to the
+        high32 and low32 bit regions with 32bit registers.
+
+        data casting between int32 and float32 has two options: Direct cast and Interpret cast. Direct cast means that
+        the raw binary representation is transferred. This is useful if you want to read individual bits of the float
+        The primary purpose of this is to read and write floats to memory. Currently, the VM doesn't support writing and reading
+        floats to memory directly. While operations may be added to support this, the current way is to load the raw
+        bits of the float into an int32 and then write the int32 to memory. Reverse operation for reading.
+
+        Interpret cast is more of a traditional cast in that the value of the source will be converted into the destination
+        type. 10 becomes 10.0 and 3.14 becomes 3.
+
+        Direct Cast is done with the regular pneumonic:
+            mov ra, fx0
+            mov fy0, ra
+
+        Interpret Cast is done with movc   (read as Move Cast or Move Convert)
+            movc ra, fx0
+            movc fy0, ra
+
+    The final mov variant is the raw mov, which only exists in reg32 form and doesn't update PF. This is useful for
+    accessing PF directly without immediately overwriting it with the mov. That said, it can be used with any gpr32
+    move as needed.
+
+    movr reg32, reg32   read as "move raw"
+
+swap reg, reg;
+    swaps the values between registers. The registers must be the same size.
+
+
+mcpy [dest], [src], count;
+    copy (count) bytes from src to dest
+    this follows cstdlib rules
+    count must be a reg32
+
+mcmp dest, [addr0], [addr1], count
+    compare (count) bytes between addr0 and addr1. store the result in dest.
+    this follows memcmp rules from cstdlib
+    dest and count must be Reg32
+
+memclr [dest_begin], [dest_end], value;
+    clear [dest_begin] through [dest_end] with value.
+    When value is a reg8 it follows memset rules.
+    When value is larger than a reg8 then it uses custom implementation.
+
+push value;
+    value can be any register or constant. The largest constant allowed is an Int48.
+    This will work within the stack pointers which are set by default but can be relocated
+    to either grow or shrink the stack size. Also note that this is shorthand and that
+    this same operation can be done by manually moving and writing to SP. Pushing does not
+    update PF
+
+        equivalent operations:
+        push 40   | sub sp, 4
+                  | mov [sp], 40
+
+    There is one additional variation to push, and that is ranged push. It will push registers RA through RZ (in that order)
+    to the stack.
+        push *
+
+
+pop reg
+    a value the size of reg will be popped off the stack and written to the register.
+    popping does update PF
+    again, this can be done manually, though since this is a single instruction it saves a cycle over
+    the manual implementation
+
+        equivalent operations:
+        pop ra   | mov ra, [sp]
+                 | add sp, 4
+
+    Similar to the ranged push, there is a ranged pop, that pops into RZ through RA, this does not update PF
+        pop *
+
+tsto [reg32], reg8#index, reg8#count
+    store (count) table entries starting at (index) into address (reg)
+
+tld reg8#index, [reg32], reg8#count
+    loadf (count) entries into table starting at (index) and sourced from (address)
+
+tsto and tld are useful if you ever need more interrupt codes than the 256 limit. You can store and load interrupts in pages
+    to reuse interrupt codes. Which page is currently loaded will need to be manually tracked to not get unexpected behavior
+    that unexpected behavior being a call to an interrupt jumping to a different address than expected because the wrong
+    page is loaded. More information on interrupts is located at the int instruction.
+
+add dest, source_a, source_b       |alternative|   add dest, source
+    dest, and source_a must be registers, source_b may be a register or constant.
+    add exists for all register types (int8, int16, int32, int64, reg32) though all registers
+    must be the same size. There is a shorthand add dest, source which will emit the opcode as add dest, dest, source
+    This updates PF.
+
+The following commands follow the same rules as add, so to simplify only their operations will be listed. If marked with
+    IO or FO it means that the operation is only allowed for Integer register or Floating point registers. Unless marked
+    explicitly, the operation will work for any register type. RP is the annotation for an operand that takes 1 fewer parameters
+
+    meaning instead of <operand> <dest>, <a>, <b>  or <operand> <dest>, <a>,
+     it follows <operand> <dest>, <source> or just <operand> <dest>
+
+sub   subtract
+mul   multiply
+div   divide
+mod   modulo
+neg   negate          RP
+inc   increment       RP IO
+dec   decrement       RP IO
+rbr   roll bits right IO
+rbl   roll bits left  IO
+land  logical and     IO
+lor   logical or      IO
+lnot  logical not     RP IO
+xor   binary xor      IO
+or    binary or       IO
+not   binary not      RP IO
+
+cmxb reg32#dest, reg32#b, reg32#m, reg32#x
+    this calculates: dest = (m*x) + b
+    Basically it condenses the following into a single instruction:
+        (given m=RA, x=RB, b=RC, dest=RD)
+
+        cmxb rd, rc, ra, rb  | mul rd, ra, rb
+                             | add rd, rc
+
+    The above spec shows reg32 as the parameter width, but f32 registers are also allowed.
+
+sqr reg32#dest, reg32#src    |alternative|  sqr reg32#dest
+    This exists for IReg32 and IReg64. Squares the value
+
+abs reg#dest, reg#src        |alternative|  abs reg#dest
+
+floor FReg32#dest, FReg32#src    RP
+ceil  FReg32, FReg32  RP
+round FReg32, FReg32  RP
+sqrt  FReg32, FReg32  RP
+cos FReg32, val  RP
+sin FReg32, val  RP
+tan FReg32, val  RP
+acos FReg32, val  RP
+asin FReg32, val  RP
+atan FReg32, val  RP
+atan2 FReg32, FReg32, FReg32
+pow FReg32, FReg32, FReg32
+log10 FReg32, FReg32
+loge FReg32, FReg32
+epow FReg32, FReg32
+ldpi FReg32   Loads PI into the register
+lde  FReg32   Loads e into the register
+inv FReg32, FReg32   RP
+    Calculates the inverse of the RegF32 (or 1.0 / FReg32)
+
+bcosmxd FReg32#dest, FReg32#b, FReg32#m, FReg32#x, FReg32#d
+    (dest) = (b) + cos((m) * (x) + (d))
+bsinmxd
+btanmxd
+
+
+Vector operations operate on 4 floats at a time.
+
+
+vnorm Vec
+vadd Vec, Vec
+vsub Vec, Vec
+vmul Vec, Vec
+vdiv Vec, Vec
+vdot FReg32, Vec, Vec
+vlen FReg32, Vec
+ldmsk Reg16, Mask   load swizzle mask to reg16
+vswz Vec, Vec, Reg16
+    copy vector using swizzle mask to the dest vector
+
+    Example: If I want to reverse the channels of the vector:
+        vswz vec0, vec1, wzyx
+
+    Example: If I want to repeat the xyxy and remove the zw channels:
+        vswz vec0, vec1, xyxy
+
+
+
+cmp a, b
+    (a) must be a register
+    (b) may be a register or constant. The width of (b) must match (a)
+
+    this sets the program flags based on the comparison of a to b. effectively performs a sub b, a, however it does
+    not write the result to either of the registers and only sets the flags.
+
+jmp [addr]
+   addr may be a reg32 or a constant (by extension a label)
+
+   Jumping will write the address of the next instruction to JR and jump to the provided address. To return from the jump
+   call Ret which will jump back to the address in JR
+
+jz [addr]
+    Jump if zero(equal) to the address. Address rules of jmp apply along with the write to JR.
+    There is an alternative form to JZ:
+
+    jz [Reg32] else [addr]
+        if the address is a Reg32 then you can include an else branch to jump if non-zero
+
+other jumps that follow the same rules
+jnz [addr]   (not equal)
+jgt [addr]
+jge [addr]
+jlt [addr]
+jle [addr]
+
+ret
+    jumps to the address in jr. This must be used over jmp jr because jmp would overwrite jr before jumping to it
+    and would then get stuck in place
+
+hlt
+    halt execution of the vm and shutdown
+
+int code
+    code is a Reg8 or Const8
+
+    This effectively jumps to the address in the interrupt table.
+
+syscall const32
+    Call a syscall using the provided code. It must be a constant. The specific codes are implementation dependant
+    and a definition file should be provided by the vm.
+
+
+
+Data Section:
+types:
+    .i8 .i16. .i32, .i64, .f32
+
+allocators:
+    m
+    $repeated(n)
+    $repeated(n) m
+    $asciz(txt)
+
+example_var: .i32 0
+example_arr: .i8 $repeated(10) 0
+example_str: .i8 $asciz("Hello World\n");
+example_str_end:
+example_str_len: .i32 0
+
+    mov ra, example_str
+    mov rb, example_str_end
+    mov rc, example_str_len
+    sub rb, ra
+    mov [rc], rb
+
+
+Macros:
+    @export <label>   add label to exports
+
+    The C PreProcessor is used so #ifdefs, #defines, and #includes work the same way they do in c
+    

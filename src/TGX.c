@@ -149,7 +149,7 @@ static uint64_t ProfilerTimestamp_Start_, ProfilerTimestamp_End_;
 int program_thread_exec(TGXContext* sys){
     void* _jTable[] = {
 /* 0x0000 */        TGX_ADDR(NOP),               TGX_ADDR(MOVR32_R32),     TGX_ADDR(MOVR16_R16),     TGX_ADDR(MOVR8_R8),
-/* 0x0004 */        TGX_ADDR(MOVR64_R64),        TGX_ADDR(NOP),            TGX_ADDR(NOP),            TGX_ADDR(MOVTBL_R32_IC8),
+/* 0x0004 */        TGX_ADDR(MOVR64_R64),        TGX_ADDR(MOVAR32_C32),    TGX_ADDR(MOVAR32_C8),     TGX_ADDR(MOVTBL_R32_IC8),
 /* 0x0008 */        TGX_ADDR(MOVTBL_R32_IR8),    TGX_ADDR(MOVR32_TBL_IC8), TGX_ADDR(MOVR32_TBL_IR8), TGX_ADDR(MOVR32_R64H),
 /* 0x000C */        TGX_ADDR(MOVR32_R64L),       TGX_ADDR(MOVR64H_R32),    TGX_ADDR(MOVR64L_R32),    TGX_ADDR(MOVR32_C32),
 /* 0x0010 */        TGX_ADDR(MOVR16_C16),        TGX_ADDR(MOVR8_C8),       TGX_ADDR(MOVM0_C48),      TGX_ADDR(MOVM1_C48),
@@ -193,7 +193,7 @@ int program_thread_exec(TGXContext* sys){
 /* 0x00A2 */        TGX_ADDR(XORR32_R32),        TGX_ADDR(XORR8_R8),       TGX_ADDR(XORR16_R16),     TGX_ADDR(XORR64_R64),
 /* 0x00A6 */        TGX_ADDR(ORR32_R32),         TGX_ADDR(ORR8_R8),        TGX_ADDR(ORR16_R16),      TGX_ADDR(ORR64_R64),
 /* 0x00AA */        TGX_ADDR(NOTR32_R32),        TGX_ADDR(NOTR8_R8),       TGX_ADDR(NOTR16_R16),     TGX_ADDR(NOTR64_R64),
-/* 0x00AE */        TGX_ADDR(MXB32),             TGX_ADDR(MXB64),          TGX_ADDR(SQR32),          TGX_ADDR(SQR64),
+/* 0x00AE */        TGX_ADDR(MXB32),             TGX_ADDR(MXBF32),          TGX_ADDR(SQR32),          TGX_ADDR(SQR64),
 /* 0x00B2 */        TGX_ADDR(ABS8),              TGX_ADDR(ABS16),          TGX_ADDR(ABS32),          TGX_ADDR(ABS64),
 /* 0x00B6 */        TGX_ADDR(ADDF32),            TGX_ADDR(ADDFC32),        TGX_ADDR(SUBF32),         TGX_ADDR(SUBFC32),
 /* 0x00BA */        TGX_ADDR(MULF32),            TGX_ADDR(MULFC32),        TGX_ADDR(DIVF32),         TGX_ADDR(DIVFC32),
@@ -307,20 +307,24 @@ int program_thread_exec(TGXContext* sys){
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
-    //NOPS
-    /*TGX_CASE(MOVR32_R32):
-    TGX_PROFILE_CALL(MOVR32_R32, 0x0005);
-//#error "Not Implemented"
-    TGX_PROFILE_END(MOVR32_R32, 0x0005);
+
+    TGX_CASE(MOVAR32_C32):
+    TGX_PROFILE_CALL(MOVAR32_C32, 0x0005);
+
+    MEMACCESS(uint32_t, sys, REG32(sys, instruction.params[0])) = instruction.const_i32;
+
+    TGX_PROFILE_END(MOVAR32_C32, 0x0005);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
-    TGX_CASE(MOVR32_R32):
-    TGX_PROFILE_CALL(MOVR32_R32, 0x0006);
-//#error "Not Implemented"
-    TGX_PROFILE_END(MOVR32_R32, 0x0006);
+    TGX_CASE(MOVAR32_C8):
+    TGX_PROFILE_CALL(MOVAR32_C8, 0x0006);
+
+    MEMACCESS(uint8_t, sys, REG32(sys, instruction.params[0])) = instruction.ext_params[0];
+
+    TGX_PROFILE_END(MOVAR32_C8, 0x0006);
     TGX_NEXT_INSTR(*sys);
-    TGX_DISPATCH(_jTable, instruction, *sys);*/
+    TGX_DISPATCH(_jTable, instruction, *sys);
 
     TGX_CASE(MOVTBL_R32_IC8):
     TGX_PROFILE_CALL(MOVTBL_R32_IC8, 0x0007);
@@ -727,16 +731,20 @@ int program_thread_exec(TGXContext* sys){
     switch (instruction.ext_params[0]) {
         default:
         case MODE8:
-            MEMACCESS(uint8_t, sys, REG32(sys, instruction.params[0])++) = MEMACCESS(uint8_t, sys, REG32(sys, instruction.params[1])++);
+            MEMACCESS(uint8_t, sys, REG32(sys, instruction.params[0])) = MEMACCESS(uint8_t, sys, REG32(sys, instruction.params[1]));
+            REG32(sys, instruction.params[0]) += sizeof(uint8_t); REG32(sys, instruction.params[1]) += sizeof(uint8_t);
         break;
         case MODE16:
-            MEMACCESS(uint16_t, sys, REG32(sys, instruction.params[0])++) = MEMACCESS(uint16_t, sys, REG32(sys, instruction.params[1])++);
+            MEMACCESS(uint16_t, sys, REG32(sys, instruction.params[0])) = MEMACCESS(uint16_t, sys, REG32(sys, instruction.params[1]));
+            REG32(sys, instruction.params[0]) += sizeof(uint16_t); REG32(sys, instruction.params[1]) += sizeof(uint16_t);
         break;
         case MODE32:
-            MEMACCESS(uint32_t, sys, REG32(sys, instruction.params[0])++) = MEMACCESS(uint32_t, sys, REG32(sys, instruction.params[1])++);
+            MEMACCESS(uint32_t, sys, REG32(sys, instruction.params[0])) = MEMACCESS(uint32_t, sys, REG32(sys, instruction.params[1]));
+            REG32(sys, instruction.params[0]) += sizeof(uint32_t); REG32(sys, instruction.params[1]) += sizeof(uint32_t);
         break;
         case MODE64:
-            MEMACCESS(uint64_t, sys, REG32(sys, instruction.params[0])++) = MEMACCESS(uint64_t, sys, REG32(sys, instruction.params[1])++);
+            MEMACCESS(uint64_t, sys, REG32(sys, instruction.params[0])) = MEMACCESS(uint64_t, sys, REG32(sys, instruction.params[1]));
+            REG32(sys, instruction.params[0]) += sizeof(uint64_t); REG32(sys, instruction.params[1]) += sizeof(uint64_t);
         break;
     }
 
@@ -753,16 +761,20 @@ int program_thread_exec(TGXContext* sys){
         switch (instruction.ext_params[0]) {
             default:
             case MODE8:
-                MEMACCESS(uint8_t, sys, REG32(sys, instruction.params[0])--) = MEMACCESS(uint8_t, sys, REG32(sys, instruction.params[1])--);
+                MEMACCESS(uint8_t, sys, REG32(sys, instruction.params[0])) = MEMACCESS(uint8_t, sys, REG32(sys, instruction.params[1]));
+                REG32(sys, instruction.params[0]) -= sizeof(uint8_t); REG32(sys, instruction.params[1]) -= sizeof(uint8_t);
             break;
             case MODE16:
-                MEMACCESS(uint16_t, sys, REG32(sys, instruction.params[0])--) = MEMACCESS(uint16_t, sys, REG32(sys, instruction.params[1])--);
+                MEMACCESS(uint16_t, sys, REG32(sys, instruction.params[0])) = MEMACCESS(uint16_t, sys, REG32(sys, instruction.params[1]));
+                REG32(sys, instruction.params[0]) -= sizeof(uint16_t); REG32(sys, instruction.params[1]) -= sizeof(uint16_t);
             break;
             case MODE32:
-                MEMACCESS(uint32_t, sys, REG32(sys, instruction.params[0])--) = MEMACCESS(uint32_t, sys, REG32(sys, instruction.params[1])--);
+                MEMACCESS(uint32_t, sys, REG32(sys, instruction.params[0])) = MEMACCESS(uint32_t, sys, REG32(sys, instruction.params[1]));
+                REG32(sys, instruction.params[0]) -= sizeof(uint32_t); REG32(sys, instruction.params[1]) -= sizeof(uint32_t);
             break;
             case MODE64:
-                MEMACCESS(uint64_t, sys, REG32(sys, instruction.params[0])--) = MEMACCESS(uint64_t, sys, REG32(sys, instruction.params[1])--);
+                MEMACCESS(uint64_t, sys, REG32(sys, instruction.params[0])) = MEMACCESS(uint64_t, sys, REG32(sys, instruction.params[1]));
+                REG32(sys, instruction.params[0]) -= sizeof(uint64_t); REG32(sys, instruction.params[1]) -= sizeof(uint64_t);
             break;
         }
     TGX_PROFILE_END(MOVAR32_AR32_D, 0x0026);
@@ -2446,14 +2458,14 @@ int program_thread_exec(TGXContext* sys){
 
 
 
-    TGX_CASE(MXB64):
-    TGX_PROFILE_CALL(MXB64, 0x00AF);
+    TGX_CASE(MXBF32):
+    TGX_PROFILE_CALL(MXBF32, 0x00AF);
 
-    REG64(sys, instruction.params[0]) = REG64(sys, instruction.params[1])
-                                        + REG64(sys, instruction.ext_params[0]) * REG64(sys, instruction.ext_params[1]);
-    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG64(sys, instruction.params[0]), 64);
+    REGF32(sys, instruction.params[0]) = REGF32(sys, instruction.params[1])
+                                        + REGF32(sys, instruction.ext_params[0]) * REGF32(sys, instruction.ext_params[1]);
+    UPDATE_PF_ZERO_NEG_BITS_F(sys, REGF32(sys, instruction.params[0]));
 
-    TGX_PROFILE_END(MXB64, 0x00AF);
+    TGX_PROFILE_END(MXBF32, 0x00AF);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
@@ -3190,7 +3202,7 @@ int program_thread_exec(TGXContext* sys){
         TGX_PROFILE_END(JZR32, 0x00E9);
         TGX_DISPATCH(_jTable, instruction, *sys);
     }
-    else if (instruction.params[1] & TGX_JMP_ELSE_FLAG) {
+    else {
         t32 = instruction.const_i32;
         if (instruction.params[1] & TGX_JMP_USE_REG_FLAG) {
             t32 = REG32(sys, t32);
@@ -3200,9 +3212,11 @@ int program_thread_exec(TGXContext* sys){
         TGX_DISPATCH(_jTable, instruction, *sys);
     }
 
+    /*
     TGX_PROFILE_END(JZR32, 0x00E9);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
+    */
 
 
 
@@ -3231,7 +3245,7 @@ int program_thread_exec(TGXContext* sys){
         TGX_PROFILE_END(JZR32, 0x00E9);
         TGX_DISPATCH(_jTable, instruction, *sys);
     }
-    else if (instruction.params[1] & TGX_JMP_ELSE_FLAG) {
+    else {
         t32 = instruction.const_i32;
         if (instruction.params[1] & TGX_JMP_USE_REG_FLAG) {
             t32 = REG32(sys, t32);
@@ -3241,9 +3255,10 @@ int program_thread_exec(TGXContext* sys){
         TGX_DISPATCH(_jTable, instruction, *sys);
     }
 
+    /*
     TGX_PROFILE_END(JNZR32, 0x00EB);
     TGX_NEXT_INSTR(*sys);
-    TGX_DISPATCH(_jTable, instruction, *sys);
+    TGX_DISPATCH(_jTable, instruction, *sys);*/
 
 
 
