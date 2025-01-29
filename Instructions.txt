@@ -568,3 +568,4 @@ OPCODES:
 0xFFFF Signal and Await Next Queue
 
 //(FUTURE) TileMap and TileSet api
+// TODO: Fast Registers

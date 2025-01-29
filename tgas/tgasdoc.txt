@@ -89,10 +89,10 @@ Register Table:
     0D      fy3      4                  float, gp
     0E      fz3      4                  float, gp
     0F      fw3      4                  float, gp
-    00      vec0     16                 the combination of fx0 through fw0, used as a vec4
-    01      vec1     16                 the combination of fx1 through fw1, used as a vec4
-    02      vec2     16                 the combination of fx2 through fw2, used as a vec4
-    03      vec3     16                 the combination of fx3 through fw3, used as a vec4
+    00      ve0     16                  the combination of fx0 through fw0, used as a vec4
+    01      ve1     16                  the combination of fx1 through fw1, used as a vec4
+    02      ve2     16                  the combination of fx2 through fw2, used as a vec4
+    03      ve3     16                  the combination of fx3 through fw3, used as a vec4
 
 **: These aren't written directly as unique opcodes beyond which 64bit register is selected. The high/low
 bit is determined by opcode emitted
@@ -192,7 +192,7 @@ mcmp dest, [addr0], [addr1], count
     this follows memcmp rules from cstdlib
     dest and count must be Reg32
 
-memclr [dest_begin], [dest_end], value;
+mclr [dest_begin], [dest_end], value;
     clear [dest_begin] through [dest_end] with value.
     When value is a reg8 it follows memset rules.
     When value is larger than a reg8 then it uses custom implementation.
@@ -265,6 +265,7 @@ lnot  logical not     RP IO
 xor   binary xor      IO
 or    binary or       IO
 not   binary not      RP IO
+and   binary and      IO
 
 cmxb reg32#dest, reg32#b, reg32#m, reg32#x
     this calculates: dest = (m*x) + b
