@@ -1,9 +1,15 @@
 TG Assembler Documentation
 
-An assembly program consists of up to 2 sections:
+An assembly program consists of up to 3 sections:
 
+$section meta
 $section prog
 $section data
+
+All significant data should be within one of those sections.
+$section meta  is used for directives. Primarily label exports
+$section prog  is used for actual program instructions
+$section data  is used for allocating static data
 
 Within the prog section lines consist of the following outline:
 [LabelDef:] [Operation] [Params...]
@@ -377,19 +383,18 @@ syscall const32
 
 Data Section:
 types:
-    .i8 .i16. .i32, .i64, .f32
+    i8, i16, i32, i64, f32, str
 
 allocators:
-    m
-    $repeated(n)
-    $repeated(n) m
-    $asciz(txt)
+    m[,m]
+    m:n   (value m, n times)
+    "txt"
 
-example_var: .i32 0
-example_arr: .i8 $repeated(10) 0
-example_str: .i8 $asciz("Hello World\n");
+example_var: i32 0
+example_arr: i8 $repeated(10) 0
+example_str: i8 $asciz("Hello World\n");
 example_str_end:
-example_str_len: .i32 0
+example_str_len: i32 0
 
     mov ra, example_str
     mov rb, example_str_end

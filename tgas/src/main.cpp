@@ -57,6 +57,12 @@ enum class RegisterID {
     REGCOUNT
 };
 
+enum class CodeSection {
+    Meta,
+    Data,
+    Program,
+};
+
 enum class Type {
     Integer, Float, Vec,
 };
@@ -74,89 +80,92 @@ struct CompilerContext {
     const char* input;
     std::vector<Instruction> program_section;
     std::vector<uint8_t> data_section;
-    std::unordered_map<std::string, uint32_t> program_labels;
-    std::unordered_map<std::string, uint32_t> data_labels;
+    std::unordered_map<std::string, uint32_t> program_labels; // this is index into the vector, not bytes yet
+    std::unordered_map<std::string, uint32_t> data_labels; // this is byte index (since it's a vector of 8bit ints)
     std::vector<std::string> export_labels;
+    std::vector<std::pair<uint32_t, std::string>> unlinked_program_labels;
+    std::vector<uint32_t> instructions_to_relink;
+    CodeSection section = CodeSection::Meta;
 };
 
-typedef bool(*EmitFunc)(CompilerContext&);
+typedef bool(*EmitFunc)(CompilerContext&, Instruction&);
 
-bool TriggerUndefined(CompilerContext& ctx);
-bool EmitAbs(CompilerContext& ctx);
-bool EmitAcos(CompilerContext& ctx);
-bool EmitAdd(CompilerContext& ctx);
-bool EmitAnd(CompilerContext& ctx);
-bool EmitAsin(CompilerContext& ctx);
-bool EmitAtan(CompilerContext& ctx);
-bool EmitAtan2(CompilerContext& ctx);
-bool EmitBcosmxd(CompilerContext& ctx);
-bool EmitBsinmxd(CompilerContext& ctx);
-bool EmitBtanmxd(CompilerContext& ctx);
-bool EmitCeil(CompilerContext& ctx);
-bool EmitCmp(CompilerContext& ctx);
-bool EmitCmxb(CompilerContext& ctx);
-bool EmitCos(CompilerContext& ctx);
-bool EmitDec(CompilerContext& ctx);
-bool EmitDiv(CompilerContext& ctx);
-bool EmitEpow(CompilerContext& ctx);
-bool EmitFloor(CompilerContext& ctx);
-bool EmitHlt(CompilerContext& ctx);
-bool EmitInt(CompilerContext& ctx);
-bool EmitInc(CompilerContext& ctx);
-bool EmitInv(CompilerContext& ctx);
-bool EmitJmp(CompilerContext& ctx);
-bool EmitJz(CompilerContext& cxt);
-bool EmitJnz(CompilerContext& ctx);
-bool EmitJgt(CompilerContext& ctx);
-bool EmitJge(CompilerContext& ctx);
-bool EmitJlt(CompilerContext& ctx);
-bool EmitJle(CompilerContext& ctx);
-bool EmitLand(CompilerContext& ctx);
-bool EmitLor(CompilerContext& ctx);
-bool EmitLnot(CompilerContext& ctx);
-bool EmitLde(CompilerContext& ctx);
-bool EmitLog10(CompilerContext& ctx);
-bool EmitLoge(CompilerContext& ctx);
-bool EmitLdpi(CompilerContext& ctx);
-bool EmitLdmsk(CompilerContext& ctx);
-bool EmitMov(CompilerContext& ctx);
-bool EmitMovia(CompilerContext& ctx);
-bool EmitMovda(CompilerContext& ctx);
-bool EmitMovc(CompilerContext& ctx);
-bool EmitMovr(CompilerContext& ctx);
-bool EmitMcpy(CompilerContext& ctx);
-bool EmitMcmp(CompilerContext& ctx);
-bool EmitMclr(CompilerContext& ctx);
-bool EmitMul(CompilerContext& ctx);
-bool EmitMod(CompilerContext& ctx);
-bool EmitNop(CompilerContext& ctx);
-bool EmitNeg(CompilerContext& ctx);
-bool EmitNot(CompilerContext& ctx);
-bool EmitOr(CompilerContext& ctx);
-bool EmitPush(CompilerContext& ctx);
-bool EmitPop(CompilerContext& ctx);
-bool EmitPow(CompilerContext& ctx);
-bool EmitRbr(CompilerContext& ctx);
-bool EmitRbl(CompilerContext& ctx);
-bool EmitRet(CompilerContext& ctx);
-bool EmitSwap(CompilerContext& ctx);
-bool EmitSub(CompilerContext& ctx);
-bool EmitSqr(CompilerContext& ctx);
-bool EmitSqrt(CompilerContext& ctx);
-bool EmitSin(CompilerContext& ctx);
-bool EmitSyscall(CompilerContext& ctx);
-bool EmitTsto(CompilerContext& ctx);
-bool EmitTld(CompilerContext& ctx);
-bool EmitTan(CompilerContext& ctx);
-bool EmitVnorm(CompilerContext& ctx);
-bool EmitVadd(CompilerContext& ctx);
-bool EmitVsub(CompilerContext& ctx);
-bool EmitVmul(CompilerContext& ctx);
-bool EmitVdiv(CompilerContext& ctx);
-bool EmitVdot(CompilerContext& ctx);
-bool EmitVlen(CompilerContext& ctx);
-bool EmitVswz(CompilerContext& ctx);
-bool EmitXor(CompilerContext& ctx);
+bool TriggerUndefined(CompilerContext& ctx, Instruction&);
+bool EmitAbs(CompilerContext& ctx, Instruction&);
+bool EmitAcos(CompilerContext& ctx, Instruction&);
+bool EmitAdd(CompilerContext& ctx, Instruction&);
+bool EmitAnd(CompilerContext& ctx, Instruction&);
+bool EmitAsin(CompilerContext& ctx, Instruction&);
+bool EmitAtan(CompilerContext& ctx, Instruction&);
+bool EmitAtan2(CompilerContext& ctx, Instruction&);
+bool EmitBcosmxd(CompilerContext& ctx, Instruction&);
+bool EmitBsinmxd(CompilerContext& ctx, Instruction&);
+bool EmitBtanmxd(CompilerContext& ctx, Instruction&);
+bool EmitCeil(CompilerContext& ctx, Instruction&);
+bool EmitCmp(CompilerContext& ctx, Instruction&);
+bool EmitCmxb(CompilerContext& ctx, Instruction&);
+bool EmitCos(CompilerContext& ctx, Instruction&);
+bool EmitDec(CompilerContext& ctx, Instruction&);
+bool EmitDiv(CompilerContext& ctx, Instruction&);
+bool EmitEpow(CompilerContext& ctx, Instruction&);
+bool EmitFloor(CompilerContext& ctx, Instruction&);
+bool EmitHlt(CompilerContext& ctx, Instruction&);
+bool EmitInt(CompilerContext& ctx, Instruction&);
+bool EmitInc(CompilerContext& ctx, Instruction&);
+bool EmitInv(CompilerContext& ctx, Instruction&);
+bool EmitJmp(CompilerContext& ctx, Instruction&);
+bool EmitJz(CompilerContext& cxt, Instruction&);
+bool EmitJnz(CompilerContext& ctx, Instruction&);
+bool EmitJgt(CompilerContext& ctx, Instruction&);
+bool EmitJge(CompilerContext& ctx, Instruction&);
+bool EmitJlt(CompilerContext& ctx, Instruction&);
+bool EmitJle(CompilerContext& ctx, Instruction&);
+bool EmitLand(CompilerContext& ctx, Instruction&);
+bool EmitLor(CompilerContext& ctx, Instruction&);
+bool EmitLnot(CompilerContext& ctx, Instruction&);
+bool EmitLde(CompilerContext& ctx, Instruction&);
+bool EmitLog10(CompilerContext& ctx, Instruction&);
+bool EmitLoge(CompilerContext& ctx, Instruction&);
+bool EmitLdpi(CompilerContext& ctx, Instruction&);
+bool EmitLdmsk(CompilerContext& ctx, Instruction&);
+bool EmitMov(CompilerContext& ctx, Instruction&);
+bool EmitMovia(CompilerContext& ctx, Instruction&);
+bool EmitMovda(CompilerContext& ctx, Instruction&);
+bool EmitMovc(CompilerContext& ctx, Instruction&);
+bool EmitMovr(CompilerContext& ctx, Instruction&);
+bool EmitMcpy(CompilerContext& ctx, Instruction&);
+bool EmitMcmp(CompilerContext& ctx, Instruction&);
+bool EmitMclr(CompilerContext& ctx, Instruction&);
+bool EmitMul(CompilerContext& ctx, Instruction&);
+bool EmitMod(CompilerContext& ctx, Instruction&);
+bool EmitNop(CompilerContext& ctx, Instruction&);
+bool EmitNeg(CompilerContext& ctx, Instruction&);
+bool EmitNot(CompilerContext& ctx, Instruction&);
+bool EmitOr(CompilerContext& ctx, Instruction&);
+bool EmitPush(CompilerContext& ctx, Instruction&);
+bool EmitPop(CompilerContext& ctx, Instruction&);
+bool EmitPow(CompilerContext& ctx, Instruction&);
+bool EmitRbr(CompilerContext& ctx, Instruction&);
+bool EmitRbl(CompilerContext& ctx, Instruction&);
+bool EmitRet(CompilerContext& ctx, Instruction&);
+bool EmitSwap(CompilerContext& ctx, Instruction&);
+bool EmitSub(CompilerContext& ctx, Instruction&);
+bool EmitSqr(CompilerContext& ctx, Instruction&);
+bool EmitSqrt(CompilerContext& ctx, Instruction&);
+bool EmitSin(CompilerContext& ctx, Instruction&);
+bool EmitSyscall(CompilerContext& ctx, Instruction&);
+bool EmitTsto(CompilerContext& ctx, Instruction&);
+bool EmitTld(CompilerContext& ctx, Instruction&);
+bool EmitTan(CompilerContext& ctx, Instruction&);
+bool EmitVnorm(CompilerContext& ctx, Instruction&);
+bool EmitVadd(CompilerContext& ctx, Instruction&);
+bool EmitVsub(CompilerContext& ctx, Instruction&);
+bool EmitVmul(CompilerContext& ctx, Instruction&);
+bool EmitVdiv(CompilerContext& ctx, Instruction&);
+bool EmitVdot(CompilerContext& ctx, Instruction&);
+bool EmitVlen(CompilerContext& ctx, Instruction&);
+bool EmitVswz(CompilerContext& ctx, Instruction&);
+bool EmitXor(CompilerContext& ctx, Instruction&);
 
 static EmitFunc s_InstructionFuncs[] {
     TriggerUndefined, EmitAbs, EmitAcos, EmitAdd, EmitAnd, EmitAsin, EmitAtan, EmitAtan2,
@@ -177,7 +186,7 @@ static EmitFunc s_InstructionFuncs[] {
     EmitXor,
 };
 
-static RegisterInfo s_RegisterTable[RegisterID::REGCOUNT] {
+static RegisterInfo s_RegisterTable[static_cast<size_t>(RegisterID::REGCOUNT)] {
     { .id = RegisterID::RA, .type = Type::Integer, .width = 4, .generalPurpose = true, .sysAuto = false, .emitID =  0 },
     { .id = RegisterID::RB, .type = Type::Integer, .width = 4, .generalPurpose = true, .sysAuto = false, .emitID =  1 },
     { .id = RegisterID::RC, .type = Type::Integer, .width = 4, .generalPurpose = true, .sysAuto = false, .emitID =  2 },
@@ -371,6 +380,7 @@ bool consume_whitespace(const char* &ptr) {
     do {
         c = *(ptr++);
         if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+            ptr--;
             break;
         }
     } while (*ptr);
@@ -451,10 +461,50 @@ std::optional<string_view> parse_number(const char* ptr){
     return { num };
 }
 
+struct NumberLiteral {
+    union {
+        uint64_t uint_val;
+        float float_val;
+    };
+    bool is_float;
+};
+
+NumberLiteral get_number_literal(string_view str){
+    NumberLiteral num{};
+
+    std::string literal{str.begin, str.end};
+    const char* cstr = literal.c_str();
+
+    if(literal.size() >= 2 && literal[0] == '0'){
+        if(literal[1] == 'x' || literal[1] == 'X'){
+            num.uint_val = std::strtoull(cstr, nullptr, 16);
+            return num;
+        }
+        if(literal[1] == 'b' || literal[1] == 'B'){
+            num.uint_val = 0;
+            for(size_t i=2; i<literal.size(); ++i){
+                if(literal[i] == '0') num.uint_val <<= 1;
+                else if(literal[i] == '1') num.uint_val = (num.uint_val << 1) | 1;
+                else break;
+            }
+            return num;
+        }
+    }
+
+    if(literal.find('.') != std::string::npos || literal.find('e') != std::string::npos || literal.find('E') != std::string::npos){
+        num.float_val = std::strtof(cstr, nullptr);
+        num.is_float = true;
+        return num;
+    }
+
+    num.uint_val = strtoull(cstr, nullptr, 10);
+    return num;
+}
+
 std::optional<string_view> parse_identifier(const char* ptr) {
     string_view id = { nullptr, nullptr };
 
-    if (!isalpha(*ptr) && *ptr != '_' && *ptr != '$') {
+    if (!isalpha(*ptr) && *ptr != '_') {
         return std::optional<string_view>{};
     }
     id.begin = ptr;
@@ -462,24 +512,75 @@ std::optional<string_view> parse_identifier(const char* ptr) {
 
     do {
         id.end++;
-        if (!isalnum(*id.end) && *id.end != '_' && *id.end != '$') {
+        if (!isalnum(*id.end) && *id.end != '_') {
             break;
         }
     } while (*id.end);
     return { id };
 }
-// TODO: Not passed by reference, will not be modified. This needs to be fixed
-std::optional<RegisterID> parse_register(const char* ptr) {
-    auto rid = parse_identifier(ptr);
+
+std::optional<RegisterID> parse_register(const char* &ctx) {
+    auto rid = parse_identifier(ctx);
     if (!rid.has_value()) {
         return std::optional<RegisterID>{};
     }
+
     std::string regstr{ rid.value().begin, rid.value().end };
     if (auto iter = s_RegisterMap.find(regstr); iter != s_RegisterMap.end()) {
-        return iter->second();
+        ctx = rid.value().end;
+        return iter->second;
     }
 
     return std::optional<RegisterID>{};
+}
+
+std::optional<RegisterID> parse_register_deref(CompilerContext& ctx){
+    const char* ptr = ctx.input;
+
+    if(*ptr != '['){
+        return std::optional<RegisterID>{};
+    }
+
+    ptr++;
+    consume_whitespace(ptr);
+
+    std::optional<RegisterID> reg = parse_register(ptr);
+
+    if(!reg.has_value()){
+        return std::optional<RegisterID>{};
+    }
+
+    consume_whitespace(ptr);
+    if(*ptr != ']'){
+        return std::optional<RegisterID>{};
+    }
+
+    ctx.input = ptr+1;
+    return reg;
+}
+
+std::optional<string_view> parse_identifier_deref(CompilerContext& ctx){
+    const char* ptr = ctx.input;
+
+    if(*ptr != '['){
+        return std::optional<string_view>{};
+    }
+    ptr++;
+    consume_whitespace(ptr);
+
+    std::optional<string_view> id = parse_identifier(ptr);
+
+    if(!id.has_value()){
+        return std::optional<string_view>{};
+    }
+    ptr = id.value().end;
+    consume_whitespace(ptr);
+
+    if(*ptr != ']'){
+        return std::optional<string_view>{};
+    }
+    ctx.input = ptr+1;
+    return id;
 }
 
 void consume_ignore_whitespace_and_comments(CompilerContext& ctx) {
@@ -503,7 +604,12 @@ void consume_ignore_whitespace_and_comments(CompilerContext& ctx) {
 bool read_and_emit_instruction(CompilerContext& ctx) {
     consume_ignore_whitespace_and_comments(ctx);
 
+    Command cmd = get_command(ctx.input);
+    Instruction& i = ctx.program_section.emplace_back();
 
+    if(!s_InstructionFuncs[static_cast<size_t>(cmd)](ctx, i)){
+        return false;
+    }
 
     return true;
 }
@@ -518,15 +624,399 @@ bool parse_label_export(CompilerContext& ctx) {
     ptr += 7;
 
     consume_whitespace(ptr);
-    // TODO
+
+    std::optional<string_view> label = parse_identifier(ptr);
+    if(label.has_value()){
+        ctx.input = label.value().end;
+        ctx.export_labels.emplace_back( label.value().begin, label.value().end );
+        return true;
+    }
+
     return false;
 }
 
-bool compile_and_emit(CompilerContext& ctx) {
+bool parse_section(CompilerContext& ctx){
+    const char* ptr = ctx.input;
+    consume_whitespace(ptr);
+    if(!streq(ptr, "$section ", 9)){
+        return false;
+    }
+    ptr += 9;
+    consume_whitespace(ptr);
+
+    std::optional<string_view> label = parse_identifier(ptr);
+
+    if(!label.has_value()){
+        throw std::runtime_error("Expected data,prog,or meta after $section");
+    }
+
+    string_view lbl = label.value();
+
+    if(streq(lbl.begin, "meta", 4)){
+        ctx.section = CodeSection::Meta;
+        ctx.input = lbl.end;
+        return true;
+    }
+
+    if(streq(lbl.begin, "data", 4)){
+        ctx.section = CodeSection::Data;
+        ctx.input = lbl.end;
+        return true;
+    }
+
+    if(streq(lbl.begin, "prog", 4)){
+        ctx.section = CodeSection::Program;
+        ctx.input = lbl.end;
+        return true;
+    }
+
+    throw std::runtime_error(std::string("Unknown section type: ") + std::string{lbl.begin, lbl.end});
+}
+
+bool parse_label(CompilerContext& ctx){
+    const char* ptr = ctx.input;
+    consume_whitespace(ptr);
+
+    std::optional<string_view> label = parse_identifier(ptr);
+
+    if(!label.has_value()){
+        return false;
+    }
+
+    ptr = label.value().end;
+    if(*ptr != ':'){
+        return false;
+    }
+
+    std::string lbl{ label.value().begin, label.value().end };
+
+    if(ctx.section == CodeSection::Program){
+        ctx.program_labels[lbl] = static_cast<uint32_t>(ctx.program_section.size());
+        ctx.input = ptr + 1;
+        return true;
+    }
+
+    if(ctx.section == CodeSection::Data){
+        ctx.data_labels[lbl] = static_cast<uint32_t>(ctx.data_section.size());
+        ctx.input = ptr + 1;
+        return true;
+    }
+
+    std::cout << "Warning: Unexpected label. Labels are expected in a program or data section\n";
+    std::cout << "    " << lbl << " will be ignored.\n";
+
+    ctx.input = ptr + 1;
+    return true;
+}
+
+bool compile_section(CompilerContext& ctx);
+
+
+bool compile_program_section(CompilerContext& ctx){
+
+    do {
+        consume_ignore_whitespace_and_comments(ctx);
+
+        if(!*ctx.input){
+            return true;
+        }
+
+        if(parse_label(ctx)){
+            continue;
+        }
+
+        if(read_and_emit_instruction(ctx)){
+           continue;
+        }
+
+        return compile_section(ctx);
+    } while(true);
+
+}
+
+bool export_str(CompilerContext& ctx){
+    consume_whitespace(ctx.input);
+
+    if(*ctx.input != '"'){
+        return false;
+    }
+
+    ctx.input++;
+    bool escaped = false;
+
+    while(*ctx.input){
+        char ch = *ctx.input++;
+
+        if(escaped){
+            switch(ch){
+                case 'n':
+                    ctx.data_section.push_back('\n'); break;
+                case 't':
+                    ctx.data_section.push_back('\t'); break;
+                case 'r':
+                    ctx.data_section.push_back('\r'); break;
+                case '0':
+                    ctx.data_section.push_back('\0'); break;
+                case '\\':
+                    ctx.data_section.push_back('\\'); break;
+                default:
+                    ctx.data_section.push_back(ch); break;
+            }
+
+            escaped = false;
+            continue;
+        }
+
+        if(ch == '"'){
+            ctx.input;
+            break;
+        }
+
+        if(ch == '\\'){
+            escaped = true;
+            continue;
+        }
+
+        ctx.data_section.push_back(ch);
+    }
+
+    ctx.data_section.push_back(0);
+
+    return true;
+}
+
+bool compile_data_section(CompilerContext& ctx){
+    do {
+        consume_ignore_whitespace_and_comments(ctx);
+
+        if(!*ctx.input){
+            return true;
+        }
+
+        if(parse_label(ctx)){
+            continue;
+        }
+
+        std::optional<string_view> declarator = parse_identifier(ctx.input);
+
+        if(!declarator.has_value()){
+            return compile_section(ctx);
+        }
+
+        uint32_t size = 0;
+        bool fp = false;
+
+        string_view dec = declarator.value();
+
+        if(streq(dec.begin, "i8", 2)){
+            size = 1;
+        }
+        else if(streq(dec.begin, "i16", 3)){
+            size = 2;
+        }
+        else if(streq(dec.begin, "i32", 3)){
+            size = 4;
+        }
+        else if(streq(dec.begin, "f32", 3)){
+            size = 4;
+            fp = true;
+        }
+        else if(streq(dec.begin, "i64", 3)){
+            size = 8;
+        }
+        else if(streq(dec.begin, "str", 3)){
+            ctx.input = dec.end;
+            if(!export_str(ctx)){
+                std::cerr << "Error exporting str data\n";
+                return false;
+            }
+            continue;
+        }
+
+        if(size == 0){
+            std::cerr << "Unexpected data declaritor: " << std::string{dec.begin, dec.end} << "\n";
+            return false;
+        }
+
+        ctx.input = dec.end;
+        consume_whitespace(ctx.input);
+        bool emitted = false;
+
+        do {
+            std::optional<string_view> mo = parse_number(ctx.input);
+            if(!mo.has_value()){
+                break;
+            }
+            string_view m = mo.value();
+            string_view n{};
+
+            ctx.input = m.end;
+
+            if(*m.end == ':'){
+                std::optional<string_view> no = parse_number(m.end+1);
+                if(!no.has_value()){
+                    std::cerr << "Expected number after ':' in data declaritor.\n";
+                    return false;
+                }
+                n = no.value();
+
+                ctx.input = n.end;
+            }
+
+            uint8_t buffer[8];
+
+            NumberLiteral num = get_number_literal(m);
+            uint32_t count = 1;
+            if(n.begin != nullptr){
+                NumberLiteral rep = get_number_literal(n);
+                if(rep.is_float){
+                    std::cerr << "Floating point value cannot be used as a repeater in a data declaritor.\n";
+                    return false;
+                }
+                count = static_cast<uint32_t>(rep.uint_val);
+            }
+
+            switch(size){
+                case 1: *buffer = static_cast<uint8_t>(num.uint_val); break;
+                case 2: *(uint16_t*)buffer = static_cast<uint16_t>(num.uint_val); break;
+                case 4: *(uint32_t*)buffer = static_cast<uint32_t>(num.uint_val); break;
+                case 8: *(uint64_t*)buffer = num.uint_val; break;
+            }
+
+            for(uint32_t i=0; i<count; i++){
+                for(uint32_t j=0; j<size; j++){
+                    ctx.data_section.push_back(buffer[j]);
+                }
+            }
+
+            emitted = true;
+
+            if(!*ctx.input){
+                return true;
+            }
+
+            if(*ctx.input == ','){
+                ctx.input++;
+                consume_whitespace(ctx.input);
+                continue;
+            }
+
+            break;
+        }
+        while(true);
+        if(!emitted) return compile_section(ctx);
+    } while(true);
+}
+
+bool compile_meta_section(CompilerContext& ctx){
+
+    do {
+        consume_ignore_whitespace_and_comments(ctx);
+
+        if(!*ctx.input) return true;
+
+        if(parse_label_export(ctx)) continue;
+
+        return compile_section(ctx);
+    } while(true);
+}
+
+bool link_and_finalize(CompilerContext& ctx){
+    uint32_t program_length = static_cast<uint32_t>(ctx.program_section.size()) * sizeof(Instruction);
+    for(auto& lp : ctx.unlinked_program_labels){
+        uint32_t instructionIdx = lp.first;
+        std::string& labelName = lp.second;
+
+        if(auto where = ctx.data_labels.find(labelName); where != ctx.data_labels.end()){
+            ctx.program_section[instructionIdx].const_i32 = program_length + where->second;
+            continue;
+        }
+
+        if(auto where = ctx.program_labels.find(labelName); where != ctx.program_labels.end()){
+            ctx.program_section[instructionIdx].const_i32 = where->second * sizeof(Instruction);
+            continue;
+        }
+
+        std::cerr << "Undefined label: " << labelName << "\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool export_binary(CompilerContext& ctx, const char* filename, bool output_debug_labels){
+    std::ofstream stream(filename, std::ios::binary);
+
+    if(!stream.is_open()){
+        return false;
+    }
+
+    for(const Instruction& instr : ctx.program_section){
+        stream.write(reinterpret_cast<const char*>(&instr), sizeof(Instruction));
+    }
+
+    for(uint8_t byte : ctx.data_section){
+        stream << byte;
+    }
+
+    stream.close();
+
+    std::string labelName(filename);
+    labelName += ".lnk";
+
+    stream.open(labelName);
+
+    if(!stream.is_open()){
+        std::cout << "Error writing link file. Binary was exported but will not be relocatable.\n";
+        return false;
+    }
+
+    for(uint32_t idx : ctx.instructions_to_relink){
+        stream << idx << "\n";
+    }
+
+
+    stream << "!DEBUG\n";
+    for(const std::string& exp : ctx.export_labels){
+
+        if(auto where = ctx.program_labels.find(exp); where != ctx.program_labels.end()){
+            stream << where->second * sizeof(Instruction) << " " << where->first << "\n";
+            continue;
+        }
+
+        if(auto where = ctx.data_labels.find(exp); where != ctx.data_labels.end()){
+            stream << where->second + (sizeof(Instruction) * ctx.program_section.size()) << " " << where->first << "\n";
+            continue;
+        }
+
+    }
+
+    stream.close();
+
+    return true;
+}
+
+bool compile_section(CompilerContext& ctx) {
     consume_ignore_whitespace_and_comments(ctx);
 
-    //TODO
-    return false;
+    if(!*ctx.input){
+        return true;
+    }
+
+    if(!parse_section(ctx)){
+        std::cerr << "Expected section declaration\n";
+        return false;
+    }
+
+    if(ctx.section == CodeSection::Meta){
+        return compile_meta_section(ctx);
+    }
+
+    if(ctx.section == CodeSection::Program){
+        return compile_program_section(ctx);
+    }
+
+    return compile_data_section(ctx);;
 }
 
 
@@ -535,6 +1025,21 @@ int main(int argc, char **argv) {
         std::cout << "Please provide a source file.\n";
         return 1;
     }
+
+    const char* output_file = "a.out";
+    bool output_debug_labels = false;
+
+    for(int i=2; i<argc; i++){
+        if(argv[i][0] == '-'){
+            if(argv[i][1] == 'o'){
+                output_file = (argv[i] + 2);
+            }
+            else if(argv[i][1] == 'g'){
+                output_debug_labels = true;
+            }
+        }
+    }
+
 
     std::string output;
 
@@ -546,9 +1051,31 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // preprocessing is working, need to filter out preprocessor comments #...
-    // then we need to actually tokenize and assemble the output.
-    // this should be pretty straightforward, seeing as the preprocessor is done already.
+    try {
+        CompilerContext ctx{0};
+        ctx.input = output.c_str();
+        std::cout << "Compiling...\n";
+        if(!compile_section(ctx)){
+            std::cerr << "Error compiling " << argv[1] << "\n";
+            return 1;
+        }
+        std::cout << "Linking...\n";
+        if(!link_and_finalize(ctx)){
+            std::cerr << "Error linking " << argv[1] << "\n";
+            return 1;
+        }
+        std::cout << "Emitting binary to " << output_file << "\n";
+        if(!export_binary(ctx, output_file, output_debug_labels)){
+            std::cout << "Error writing to " << output_file << "\n";
+            return 1;
+        }
+
+        std::cout << "Finished\n";
+    }
+    catch(const std::runtime_error& err) {
+        std::cerr << err.what() << "\n";
+        return 1;
+    }
 
     return 0;
 }
@@ -613,231 +1140,237 @@ std::string preprocess_input(const char *filename) {
 }
 
 
-bool TriggerUndefined(CompilerContext& ctx){
+bool TriggerUndefined(CompilerContext& ctx, Instruction& inst){
+    throw std::runtime_error(std::string("Undefined instruction sitting around: ") + std::string{ctx.input, ctx.input+3});
+}
+bool EmitAbs(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitAcos(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitAdd(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitAnd(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitAsin(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitAtan(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitAtan2(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitBcosmxd(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitBsinmxd(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitBtanmxd(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitCeil(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitCmp(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitCmxb(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitCos(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitDec(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitDiv(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitEpow(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitFloor(CompilerContext& ctx, Instruction& inst){
+    return false;
+}
+bool EmitHlt(CompilerContext& ctx, Instruction& inst){
+    inst.opcode = 0x010C;
+    ctx.input += sizeof("hlt");
     return true;
 }
-bool EmitAbs(CompilerContext& ctx){
+bool EmitInt(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitAcos(CompilerContext& ctx){
+bool EmitInc(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitAdd(CompilerContext& ctx){
+bool EmitInv(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitAnd(CompilerContext& ctx){
+bool EmitJmp(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitAsin(CompilerContext& ctx){
+bool EmitJz(CompilerContext& cxt, Instruction& inst){
     return false;
 }
-bool EmitAtan(CompilerContext& ctx){
+bool EmitJnz(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitAtan2(CompilerContext& ctx){
+bool EmitJgt(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitBcosmxd(CompilerContext& ctx){
+bool EmitJge(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitBsinmxd(CompilerContext& ctx){
+bool EmitJlt(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitBtanmxd(CompilerContext& ctx){
+bool EmitJle(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitCeil(CompilerContext& ctx){
+bool EmitLand(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitCmp(CompilerContext& ctx){
+bool EmitLor(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitCmxb(CompilerContext& ctx){
+bool EmitLnot(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitCos(CompilerContext& ctx){
+bool EmitLde(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitDec(CompilerContext& ctx){
+bool EmitLog10(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitDiv(CompilerContext& ctx){
+bool EmitLoge(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitEpow(CompilerContext& ctx){
+bool EmitLdpi(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitFloor(CompilerContext& ctx){
+bool EmitLdmsk(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitHlt(CompilerContext& ctx){
+bool EmitMov(CompilerContext& ctx, Instruction& inst){
+
+    //TODO: What is a good way to implement this???
+    // TODO: Perhaps use a naive pattern matching for this??
+
     return false;
 }
-bool EmitInt(CompilerContext& ctx){
+bool EmitMovia(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitInc(CompilerContext& ctx){
+bool EmitMovda(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitInv(CompilerContext& ctx){
+bool EmitMovc(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitJmp(CompilerContext& ctx){
+bool EmitMovr(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitJz(CompilerContext& cxt){
+bool EmitMcpy(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitJnz(CompilerContext& ctx){
+bool EmitMcmp(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitJgt(CompilerContext& ctx){
+bool EmitMclr(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitJge(CompilerContext& ctx){
+bool EmitMul(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitJlt(CompilerContext& ctx){
+bool EmitMod(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitJle(CompilerContext& ctx){
+bool EmitNop(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitLand(CompilerContext& ctx){
+bool EmitNeg(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitLor(CompilerContext& ctx){
+bool EmitNot(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitLnot(CompilerContext& ctx){
+bool EmitOr(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitLde(CompilerContext& ctx){
+bool EmitPush(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitLog10(CompilerContext& ctx){
+bool EmitPop(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitLoge(CompilerContext& ctx){
+bool EmitPow(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitLdpi(CompilerContext& ctx){
+bool EmitRbr(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitLdmsk(CompilerContext& ctx){
+bool EmitRbl(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitMov(CompilerContext& ctx){
+bool EmitRet(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitMovia(CompilerContext& ctx){
+bool EmitSwap(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitMovda(CompilerContext& ctx){
+bool EmitSub(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitMovc(CompilerContext& ctx){
+bool EmitSqr(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitMovr(CompilerContext& ctx){
+bool EmitSqrt(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitMcpy(CompilerContext& ctx){
+bool EmitSin(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitMcmp(CompilerContext& ctx){
+bool EmitSyscall(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitMclr(CompilerContext& ctx){
+bool EmitTsto(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitMul(CompilerContext& ctx){
+bool EmitTld(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitMod(CompilerContext& ctx){
+bool EmitTan(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitNop(CompilerContext& ctx){
+bool EmitVnorm(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitNeg(CompilerContext& ctx){
+bool EmitVadd(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitNot(CompilerContext& ctx){
+bool EmitVsub(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitOr(CompilerContext& ctx){
+bool EmitVmul(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitPush(CompilerContext& ctx){
+bool EmitVdiv(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitPop(CompilerContext& ctx){
+bool EmitVdot(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitPow(CompilerContext& ctx){
+bool EmitVlen(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitRbr(CompilerContext& ctx){
+bool EmitVswz(CompilerContext& ctx, Instruction& inst){
     return false;
 }
-bool EmitRbl(CompilerContext& ctx){
-    return false;
-}
-bool EmitRet(CompilerContext& ctx){
-    return false;
-}
-bool EmitSwap(CompilerContext& ctx){
-    return false;
-}
-bool EmitSub(CompilerContext& ctx){
-    return false;
-}
-bool EmitSqr(CompilerContext& ctx){
-    return false;
-}
-bool EmitSqrt(CompilerContext& ctx){
-    return false;
-}
-bool EmitSin(CompilerContext& ctx){
-    return false;
-}
-bool EmitSyscall(CompilerContext& ctx){
-    return false;
-}
-bool EmitTsto(CompilerContext& ctx){
-    return false;
-}
-bool EmitTld(CompilerContext& ctx){
-    return false;
-}
-bool EmitTan(CompilerContext& ctx){
-    return false;
-}
-bool EmitVnorm(CompilerContext& ctx){
-    return false;
-}
-bool EmitVadd(CompilerContext& ctx){
-    return false;
-}
-bool EmitVsub(CompilerContext& ctx){
-    return false;
-}
-bool EmitVmul(CompilerContext& ctx){
-    return false;
-}
-bool EmitVdiv(CompilerContext& ctx){
-    return false;
-}
-bool EmitVdot(CompilerContext& ctx){
-    return false;
-}
-bool EmitVlen(CompilerContext& ctx){
-    return false;
-}
-bool EmitVswz(CompilerContext& ctx){
-    return false;
-}
-bool EmitXor(CompilerContext& ctx){
+bool EmitXor(CompilerContext& ctx, Instruction& inst){
     return false;
 }
