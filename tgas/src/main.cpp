@@ -88,6 +88,7 @@ struct CompilerContext {
     CodeSection section = CodeSection::Meta;
 };
 
+/*
 typedef bool(*EmitFunc)(CompilerContext&, Instruction&);
 
 bool TriggerUndefined(CompilerContext& ctx, Instruction&);
@@ -184,7 +185,7 @@ static EmitFunc s_InstructionFuncs[] {
     EmitTsto, EmitTld, EmitTan,
     EmitVnorm, EmitVadd, EmitVsub, EmitVmul, EmitVdiv, EmitVdot, EmitVlen, EmitVswz,
     EmitXor,
-};
+};*/
 
 static RegisterInfo s_RegisterTable[static_cast<size_t>(RegisterID::REGCOUNT)] {
     { .id = RegisterID::RA, .type = Type::Integer, .width = 4, .generalPurpose = true, .sysAuto = false, .emitID =  0 },
@@ -239,10 +240,10 @@ static RegisterInfo s_RegisterTable[static_cast<size_t>(RegisterID::REGCOUNT)] {
     { .id = RegisterID::RZS, .type = Type::Integer, .width = 1, .generalPurpose = true, .sysAuto = false, .emitID =  9 },
     { .id = RegisterID::M0, .type = Type::Integer, .width = 8, .generalPurpose = true, .sysAuto = false, .emitID =  0 },
     { .id = RegisterID::M1, .type = Type::Integer, .width = 8, .generalPurpose = true, .sysAuto = false, .emitID =  1 },
-    { .id = RegisterID::M0L, .type = Type::Integer, .width = 4, .generalPurpose = true, .sysAuto = false, .emitID =  0 },
-    { .id = RegisterID::M0H, .type = Type::Integer, .width = 4, .generalPurpose = true, .sysAuto = false, .emitID =  0 },
-    { .id = RegisterID::M1L, .type = Type::Integer, .width = 4, .generalPurpose = true, .sysAuto = false, .emitID =  1 },
-    { .id = RegisterID::M1H, .type = Type::Integer, .width = 4, .generalPurpose = true, .sysAuto = false, .emitID =  1 },
+    { .id = RegisterID::M0L, .type = Type::Integer, .width = 4, .generalPurpose = false, .sysAuto = false, .emitID =  0 }, // these are generalPurpose = false for the sake of
+    { .id = RegisterID::M0H, .type = Type::Integer, .width = 4, .generalPurpose = false, .sysAuto = false, .emitID =  0 }, // being able to distinguish them from the other 32bit
+    { .id = RegisterID::M1L, .type = Type::Integer, .width = 4, .generalPurpose = false, .sysAuto = false, .emitID =  1 }, // registers, as these cannot be used for dereferencing
+    { .id = RegisterID::M1H, .type = Type::Integer, .width = 4, .generalPurpose = false, .sysAuto = false, .emitID =  1 }, // directly
     { .id = RegisterID::FX0, .type = Type::Float, .width = 4, .generalPurpose = true, .sysAuto = false, .emitID =  0 },
     { .id = RegisterID::FY0, .type = Type::Float, .width = 4, .generalPurpose = true, .sysAuto = false, .emitID =  1 },
     { .id = RegisterID::FZ0, .type = Type::Float, .width = 4, .generalPurpose = true, .sysAuto = false, .emitID =  2 },
@@ -298,7 +299,7 @@ static std::unordered_map<std::string, Command> s_CommandIDs = {
     {"jnz", Command::Jnz},         {"jgt", Command::Jgt},         {"jge", Command::Jge},
     {"jlt", Command::Jlt},         {"jle", Command::Jle},         {"land", Command::Land},
     {"lor", Command::Lor},         {"lnot", Command::Lnot},       {"lde", Command::Lde},
-    {"log10", Command::Log10},     {"loge", Command::Loge},       {"ldpi", Command::Ldpi},
+    {"log", Command::Log10},       {"ln", Command::Loge},         {"ldpi", Command::Ldpi},
     {"ldmsk", Command::Ldmsk},     {"movia", Command::Movia},     {"movda", Command::Movda},
     {"movc", Command::Movc},       {"movr", Command::Movr},       {"mov", Command::Mov},
     {"mcpy", Command::Mcpy},       {"mclr", Command::Mclr},       {"mcmp", Command::Mcmp},
@@ -313,6 +314,35 @@ static std::unordered_map<std::string, Command> s_CommandIDs = {
     {"vmul", Command::Vmul},       {"vdiv", Command::Vdiv},       {"vdot", Command::Vdot},
     {"vlen", Command::Vlen},       {"vswz", Command::Vswz},       {"xor", Command::Xor},
 };
+
+static std::unordered_map<Command, std::string> s_CommandNames = {
+    {Command::Abs, "abs"},         {Command::Acos, "acos"},       {Command::And, "and"},
+    {Command::Asin, "asin"},       {Command::Atan2, "atan2"},     {Command::Atan, "atan"},
+    {Command::Add, "add"},         {Command::Bcosmxd, "bcosmxd"}, {Command::Bsinmxd, "bsinmxd"},
+    {Command::Btanmxd, "btanmxd"}, {Command::Ceil, "ceil"},       {Command::Cmp, "cmp"},
+    {Command::Cmxb, "cmxb"},       {Command::Cos, "cos"},         {Command::Dec, "dec"},
+    {Command::Div, "div"},         {Command::Epow, "epow"},       {Command::Floor, "floor"},
+    {Command::Hlt, "hlt"},         {Command::Int, "int"},         {Command::Inc, "inc"},
+    {Command::Inv, "inv"},         {Command::Jmp, "jmp"},         {Command::Jz, "jz"},
+    {Command::Jnz, "jnz"},         {Command::Jgt, "jgt"},         {Command::Jge, "jge"},
+    {Command::Jlt, "jlt"},         {Command::Jle, "jle"},         {Command::Land, "land"},
+    {Command::Lor, "lor"},         {Command::Lnot, "lnot"},       {Command::Lde, "lde"},
+    {Command::Log10, "log"},       {Command::Loge, "ln"},         {Command::Ldpi, "ldpi"},
+    {Command::Ldmsk, "ldmsk"},     {Command::Movia, "movia"},     {Command::Movda, "movda"},
+    {Command::Movc, "movc"},       {Command::Movr, "movr"},       {Command::Mov, "mov"},
+    {Command::Mcpy, "mcpy"},       {Command::Mclr, "mclr"},       {Command::Mcmp, "mcmp"},
+    {Command::Mul, "mul"},         {Command::Mod, "mod"},         {Command::Nop, "nop"},
+    {Command::Neg, "neg"},         {Command::Not, "not"},         {Command::Or, "or"},
+    {Command::Push, "push"},       {Command::Pop, "pop"},         {Command::Pow, "pow"},
+    {Command::Rbl, "rbl"},         {Command::Rbr, "rbr"},         {Command::Ret, "ret"},
+    {Command::Swap, "swap"},       {Command::Sub, "sub"},         {Command::Sqrt, "sqrt"},
+    {Command::Sqr, "sqr"},         {Command::Sin, "sin"},         {Command::Syscall, "syscall"},
+    {Command::Tsto, "tsto"},       {Command::Tld, "tld"},         {Command::Tan, "tan"},
+    {Command::Vnorm, "vnorm"},     {Command::Vadd, "vadd"},       {Command::Vsub, "vsub"},
+    {Command::Vmul, "vmul"},       {Command::Vdiv, "vdiv"},       {Command::Vdot, "vdot"},
+    {Command::Vlen, "vlen"},       {Command::Vswz, "vswz"},       {Command::Xor, "xor"},
+};
+
 
 static std::unordered_map<std::string, RegisterID> s_RegisterMap = {
     { "ra", RegisterID::RA }, { "rb", RegisterID::RB }, { "rc", RegisterID::RC },
@@ -339,6 +369,28 @@ static std::unordered_map<std::string, RegisterID> s_RegisterMap = {
     { "ve0", RegisterID::VE0 }, { "ve1", RegisterID::VE1 }, { "ve2", RegisterID::VE2 }, { "ve3", RegisterID::VE3 },
 };
 
+struct NumberLiteral {
+    union {
+        uint64_t uint_val;
+        float float_val;
+    };
+    bool is_float;
+};
+std::optional<string_view> parse_number(const char* ptr);
+NumberLiteral get_number_literal(string_view str);
+
+
+
+#define INCLUDE_DATA_TABLE
+#include "optable.inc"
+
+static uint64_t s_Line{0};
+static string_view s_CurrentFile{ nullptr, nullptr };
+
+std::string get_error_location() {
+    return std::string{s_CurrentFile.begin, s_CurrentFile.end} + " " + std::to_string(s_Line) + ": ";
+}
+
 char next(const char* &ch) {
     if (*(ch+1)) {
         ch++;
@@ -359,21 +411,7 @@ bool streq(const char* a, const char* b, size_t len) {
     return true;
 }
 
-bool consume_comment(const char* &ptr) {
-    if (*ptr == '#' || *ptr == ';') {
-        while (*(++ptr)) {
-            if (*ptr == '\n') {
-                ptr++;
-                return true;
-            }
-        }
-    }
-    else {
-        return false;
-    }
-    return true;
-}
-bool consume_whitespace(const char* &ptr) {
+bool consume_whitespace(const char* &ptr, bool break_on_newline = false) {
     if (*ptr != ' ' && *ptr != '\t' && *ptr != '\n' && *ptr != '\r') return false;
 
     char c;
@@ -383,7 +421,62 @@ bool consume_whitespace(const char* &ptr) {
             ptr--;
             break;
         }
+        s_Line += c == '\n';
+        if (break_on_newline && c == '\n') {
+            break;
+        }
     } while (*ptr);
+    return true;
+}
+
+bool consume_comment(const char* &ptr) {
+    if (*ptr == ';') {
+        while (*(++ptr)) {
+            if (*ptr == '\n') {
+                s_Line++;
+                ptr++;
+                return true;
+            }
+        }
+    }
+    else if (*ptr == '#') {
+        ++ptr;
+
+        while (*ptr && (*ptr == ' ' || *ptr == '\t')) {
+            ptr++;
+        }
+        std::optional<string_view> num = parse_number(ptr);
+        if (!num.has_value()) {
+            while (*ptr != '\n') {
+                ptr++;
+            }
+            return true;
+        }
+        ptr = num.value().end;
+
+        NumberLiteral literal = get_number_literal(num.value());
+        s_Line = literal.uint_val ;
+
+        while (*ptr && (*ptr == ' ' || *ptr == '\t')) {
+            ptr++;
+        }
+        if (*ptr == '"') {
+            s_CurrentFile.begin = (++ptr);
+            while (*ptr != '"') {
+                ptr++;
+            }
+            s_CurrentFile.end = (ptr-1);
+            ptr++;
+        }
+        while (*ptr && *ptr != '\n') {
+            ptr++;
+        }
+        ptr++;
+        return true;
+    }
+    else {
+        return false;
+    }
     return true;
 }
 
@@ -397,6 +490,7 @@ Command get_command(const char* &ptr) {
         auto& bucket = iter->second;
         for (std::string& s : bucket) {
             if (streq(s.c_str(), ptr, s.length())) {
+                ptr += s.length();
                 return s_CommandIDs.at(s);
             }
         }
@@ -460,14 +554,6 @@ std::optional<string_view> parse_number(const char* ptr){
 
     return { num };
 }
-
-struct NumberLiteral {
-    union {
-        uint64_t uint_val;
-        float float_val;
-    };
-    bool is_float;
-};
 
 NumberLiteral get_number_literal(string_view str){
     NumberLiteral num{};
@@ -601,17 +687,205 @@ void consume_ignore_whitespace_and_comments(CompilerContext& ctx) {
     } while (true);
 }
 
+uint32_t get_param_type(CompilerContext& ctx, string_view view, NumberLiteral& literal) {
+    if (streq(view.begin, "i8", 2)) {
+        return PARAM_TYPE_Size8;
+    }
+    if (streq(view.begin, "i16", 3)) {
+        return PARAM_TYPE_Size16;
+    }
+    if (streq(view.begin, "i32", 3)) {
+        return PARAM_TYPE_Size32;
+    }
+    if (streq(view.begin, "i64", 3)) {
+        return PARAM_TYPE_Size64;
+    }
+    if (streq(view.begin, "tbl", 4)) {
+        return PARAM_TYPE_Table;
+    }
+
+    std::string str{view.begin, view.end};
+
+    if (auto where = s_RegisterMap.find(str); where != s_RegisterMap.end()) {
+        RegisterID reg = where->second;
+        RegisterInfo rinfo = s_RegisterTable[static_cast<size_t>(reg)];
+
+        switch (rinfo.type) {
+            case Type::Integer:
+
+                literal.uint_val = rinfo.emitID;
+
+                switch (rinfo.width) {
+                    case 1: return PARAM_TYPE_R8;
+                    case 2: return PARAM_TYPE_R16;
+                    case 4: {
+                        if (*str.rbegin() == 'l') {
+                            return PARAM_TYPE_R64L;
+                        }
+                        if (*str.rbegin() == 'h') {
+                            return PARAM_TYPE_R64H;
+                        }
+                        return PARAM_TYPE_R32;
+                    }
+                    case 8: return PARAM_TYPE_R64;
+                    default: throw std::runtime_error(get_error_location() + "Invalid register width");
+                }
+            case Type::Float:
+                return PARAM_TYPE_F32;
+            case Type::Vec:
+                return PARAM_TYPE_RVec;
+            default:
+                throw std::runtime_error(get_error_location() + "Invalid register type");
+        }
+    }
+
+    if (*str.cbegin() == '[' && *str.crbegin() == ']') {
+        std::string reg = str.substr(1, str.length() - 2);
+        if (auto where = s_RegisterMap.find(reg); where != s_RegisterMap.end()) {
+            auto& info = s_RegisterTable[static_cast<size_t>(where->second)];
+
+            if (info.type != Type::Integer || info.width != 4 || !info.generalPurpose) {
+                throw std::runtime_error(get_error_location() + reg + " is not allowed for dereferencing. Only general purpose 32 bit registers are allowed.");
+            }
+
+            literal.uint_val = info.emitID;
+            return PARAM_TYPE_DeR32;
+        }
+        throw std::runtime_error(get_error_location() + reg + " is not a known register for dereferencing. Only 32 bit registers are allowed.");
+    }
+
+    if (isdigit(*str.begin())) {
+        literal = get_number_literal(view);
+        return PARAM_TYPE_Imm;
+    }
+
+    //double check these label values
+    /*if (auto wh = ctx.program_labels.find(str); wh != ctx.program_labels.end()) {
+        literal.uint_val = wh->second * sizeof(Instruction);
+        return PARAM_TYPE_Imm;
+    }
+
+    if (auto wh = ctx.data_labels.find(str); wh != ctx.data_labels.end()) {
+        literal.uint_val = wh->second ;
+        return PARAM_TYPE_Imm;
+    }*/
+
+    ctx.unlinked_program_labels.push_back(std::make_pair(ctx.program_section.size() - 1, str));
+    literal.uint_val = 0;
+    return PARAM_TYPE_Imm;
+}
+
+uint32_t parse_param_ids(CompilerContext& ctx, Instruction& instr, std::vector<string_view>& params) {
+    const char* ptr = ctx.input;
+    uint32_t paramid = 0;
+    int param_count = 0;
+    do {
+        consume_whitespace(ptr);
+        if (!*ptr || *ptr == ';') {
+            ctx.input = ptr;
+            return paramid;
+        }
+        string_view param{ptr, ptr};
+        char ch = *param.end;
+        while (ch && ch != ',' && ch != '\n' && ch != ' ' && ch != '\t' && ch != '\r' && ch != ';') {
+            ch = *(param.end++);
+        }
+        param.end--;
+
+        std::string debug_str{param.begin, param.end};
+
+        params.push_back(param);
+        NumberLiteral immediate{};
+        uint32_t ptype = get_param_type(ctx, param, immediate);
+        paramid = (paramid << PARAM_MASK_WIDTH) | ptype;
+
+        switch (ptype) {
+            case PARAM_TYPE_None:
+            case PARAM_TYPE_Size8:
+            case PARAM_TYPE_Size16:
+            case PARAM_TYPE_Size32:
+            case PARAM_TYPE_Size64:
+            case PARAM_TYPE_Table:
+                break;
+            case PARAM_TYPE_R32:
+            case PARAM_TYPE_R8:
+            case PARAM_TYPE_R16:
+            case PARAM_TYPE_R64:
+            case PARAM_TYPE_RVec:
+            case PARAM_TYPE_DeR32:
+            case PARAM_TYPE_F32:
+            case PARAM_TYPE_R64H:
+            case PARAM_TYPE_R64L:
+                switch (param_count++) {
+                    case 0:
+                        instr.params[0] = static_cast<uint8_t>(immediate.uint_val);
+                        break;
+                    case 1:
+                        instr.params[1] = static_cast<uint8_t>(immediate.uint_val);
+                        break;
+                    case 2:
+                        instr.ext_params[0] = static_cast<uint8_t>(immediate.uint_val);
+                        break;
+                    case 3:
+                        instr.ext_params[1] = static_cast<uint8_t>(immediate.uint_val);
+                        break;
+                    case 4:
+                        instr.ext_params[2] = static_cast<uint8_t>(immediate.uint_val);
+                        break;
+                    case 5:
+                        instr.ext_params[3] = static_cast<uint8_t>(immediate.uint_val);
+                        break;
+                    default:
+                        throw std::runtime_error(get_error_location() + "Too many parameters.");
+                }
+                break;
+            case PARAM_TYPE_Imm:
+                instr.const_i32 = static_cast<uint32_t>(immediate.uint_val);
+                break;
+        }
+
+        ptr = param.end;
+        if (*ptr != ',') {
+            ctx.input = ptr;
+            return paramid;
+        }
+        ptr++;
+    } while (true);
+}
+
 bool read_and_emit_instruction(CompilerContext& ctx) {
     consume_ignore_whitespace_and_comments(ctx);
 
     Command cmd = get_command(ctx.input);
+    if (cmd == Command::Undefined) {
+        throw std::runtime_error("Undefined command");
+    }
+    std::string& cmdName = s_CommandNames.at(cmd);
     Instruction& i = ctx.program_section.emplace_back();
 
-    if(!s_InstructionFuncs[static_cast<size_t>(cmd)](ctx, i)){
+    std::vector<string_view> params{};
+    uint32_t param_id = parse_param_ids(ctx, i, params);
+
+    std::unordered_map<uint32_t, TableEntry> *tbl = nullptr;
+
+    if(auto where = TableMap.find(cmdName); where != TableMap.end()){
+        tbl = where->second;
+    }
+
+    if(tbl == nullptr){
+        std::cerr << get_error_location() << cmdName << " is not a recognized command.\n";
         return false;
     }
 
-    return true;
+    if (auto where = tbl->find(param_id); where != tbl->end()) {
+        i.opcode = where->second.opcode;
+        if (where->second.handler != nullptr) {
+            where->second.handler(i, param_id, params);
+        }
+        return true;
+    }
+    InvalidOperandParams(i, param_id, params);
+    return false;
 }
 
 
@@ -647,7 +921,7 @@ bool parse_section(CompilerContext& ctx){
     std::optional<string_view> label = parse_identifier(ptr);
 
     if(!label.has_value()){
-        throw std::runtime_error("Expected data,prog,or meta after $section");
+        throw std::runtime_error(get_error_location() + "Expected data,prog,or meta after $section");
     }
 
     string_view lbl = label.value();
@@ -670,7 +944,7 @@ bool parse_section(CompilerContext& ctx){
         return true;
     }
 
-    throw std::runtime_error(std::string("Unknown section type: ") + std::string{lbl.begin, lbl.end});
+    throw std::runtime_error(get_error_location() + "Unknown section type: " + std::string{lbl.begin, lbl.end});
 }
 
 bool parse_label(CompilerContext& ctx){
@@ -725,8 +999,13 @@ bool compile_program_section(CompilerContext& ctx){
             continue;
         }
 
-        if(read_and_emit_instruction(ctx)){
-           continue;
+        try {
+            if(read_and_emit_instruction(ctx)){
+                continue;
+            }
+        }
+        catch (std::runtime_error const&) {
+
         }
 
         return compile_section(ctx);
@@ -768,7 +1047,7 @@ bool export_str(CompilerContext& ctx){
         }
 
         if(ch == '"'){
-            ctx.input;
+            //ctx.input; This might be needed+incomplete but I'm not sure
             break;
         }
 
@@ -804,7 +1083,7 @@ bool compile_data_section(CompilerContext& ctx){
         }
 
         uint32_t size = 0;
-        bool fp = false;
+        //bool fp = false;
 
         string_view dec = declarator.value();
 
@@ -819,7 +1098,7 @@ bool compile_data_section(CompilerContext& ctx){
         }
         else if(streq(dec.begin, "f32", 3)){
             size = 4;
-            fp = true;
+            //fp = true;
         }
         else if(streq(dec.begin, "i64", 3)){
             size = 8;
@@ -827,14 +1106,14 @@ bool compile_data_section(CompilerContext& ctx){
         else if(streq(dec.begin, "str", 3)){
             ctx.input = dec.end;
             if(!export_str(ctx)){
-                std::cerr << "Error exporting str data\n";
+                std::cerr << get_error_location() << "Error exporting str data\n";
                 return false;
             }
             continue;
         }
 
         if(size == 0){
-            std::cerr << "Unexpected data declaritor: " << std::string{dec.begin, dec.end} << "\n";
+            std::cerr << get_error_location() << "Unexpected data declaritor: " << std::string{dec.begin, dec.end} << "\n";
             return false;
         }
 
@@ -855,7 +1134,7 @@ bool compile_data_section(CompilerContext& ctx){
             if(*m.end == ':'){
                 std::optional<string_view> no = parse_number(m.end+1);
                 if(!no.has_value()){
-                    std::cerr << "Expected number after ':' in data declaritor.\n";
+                    std::cerr << get_error_location() << "Expected number after ':' in data declaritor.\n";
                     return false;
                 }
                 n = no.value();
@@ -870,7 +1149,7 @@ bool compile_data_section(CompilerContext& ctx){
             if(n.begin != nullptr){
                 NumberLiteral rep = get_number_literal(n);
                 if(rep.is_float){
-                    std::cerr << "Floating point value cannot be used as a repeater in a data declaritor.\n";
+                    std::cerr << get_error_location() << "Floating point value cannot be used as a repeater in a data declaritor.\n";
                     return false;
                 }
                 count = static_cast<uint32_t>(rep.uint_val);
@@ -975,7 +1254,6 @@ bool export_binary(CompilerContext& ctx, const char* filename, bool output_debug
         stream << idx << "\n";
     }
 
-
     stream << "!DEBUG\n";
     for(const std::string& exp : ctx.export_labels){
 
@@ -988,7 +1266,7 @@ bool export_binary(CompilerContext& ctx, const char* filename, bool output_debug
             stream << where->second + (sizeof(Instruction) * ctx.program_section.size()) << " " << where->first << "\n";
             continue;
         }
-
+        throw std::runtime_error(get_error_location() + "Undefined label: " + exp);
     }
 
     stream.close();
@@ -1004,7 +1282,7 @@ bool compile_section(CompilerContext& ctx) {
     }
 
     if(!parse_section(ctx)){
-        std::cerr << "Expected section declaration\n";
+        std::cerr << get_error_location() << "Expected section declaration\n";
         return false;
     }
 
@@ -1040,6 +1318,8 @@ int main(int argc, char **argv) {
         }
     }
 
+    s_CurrentFile.begin = argv[1];
+    s_CurrentFile.end = s_CurrentFile.begin + strlen(argv[1]);
 
     std::string output;
 
@@ -1050,6 +1330,8 @@ int main(int argc, char **argv) {
         std::cerr << err.what() << "\n";
         return 1;
     }
+
+    //std::cout << output << "\n";
 
     try {
         CompilerContext ctx{0};
@@ -1140,6 +1422,59 @@ std::string preprocess_input(const char *filename) {
 }
 
 
+void InvalidOperandParams(Instruction& instr, uint32_t, std::vector<string_view>& view){
+    std::cout << get_error_location() << "Invalid operands for instruction: 0x" << std::hex << instr.opcode << std::dec << "\n";
+
+    for (const string_view& sv : view) {
+        std::cout << std::string{sv.begin, sv.end} << ", ";
+    }
+    std::cout << "\b\b  \n";
+}
+
+void HandleMovToTblC8(Instruction& instr, uint32_t, std::vector<string_view>&){
+    instr.params[1] = instr.params[0];
+}
+void HandleMovToTblR8(Instruction& instr, uint32_t, std::vector<string_view>&){
+    uint8_t t = instr.params[0];
+    instr.params[1] = instr.params[0];
+    instr.params[0] = t;
+}
+void HandleMovConst48(Instruction& instr, uint32_t, std::vector<string_view>& params){
+    NumberLiteral lit = get_number_literal(*params.rbegin());
+
+    instr.const_i32 = static_cast<uint32_t>(lit.uint_val & 0x00000000FFFFFFFF);
+    instr.param16 = static_cast<uint16_t>((lit.uint_val >> 32) & 0xFFFF);
+
+    if (streq(params[0].begin, "m1", 2)) {
+        instr.opcode++;
+    }
+}
+
+void HandleTableLoad(Instruction& instr, uint32_t, std::vector<string_view>&){
+    uint8_t t = instr.params[0];
+    instr.params[0] = instr.params[1];
+    instr.params[1] = t;
+}
+void HandleMathRegExpand(Instruction& instr, uint32_t, std::vector<string_view>&){
+    instr.ext_params[0] = instr.params[1];
+    instr.params[1] = instr.params[0];
+}
+void HandleMathImmExpand(Instruction& instr, uint32_t, std::vector<string_view>&){
+    instr.params[1] = instr.params[0];
+}
+void HandleElseCode(Instruction& instr, uint32_t, std::vector<string_view>&){
+    instr.params[1] = TGX_JMP_ELSE_FLAG;
+}
+void HandleElseCodeReg(Instruction& instr, uint32_t, std::vector<string_view>&){
+    instr.ext_params[0] = instr.params[1];
+    instr.params[1] = TGX_JMP_ELSE_FLAG | TGX_JMP_USE_REG_FLAG;
+}
+void HandleNoElseCode(Instruction& instr, uint32_t, std::vector<string_view>&){
+    instr.ext_params[0] = instr.params[1];
+    instr.params[1] = 0;
+}
+
+/*
 bool TriggerUndefined(CompilerContext& ctx, Instruction& inst){
     throw std::runtime_error(std::string("Undefined instruction sitting around: ") + std::string{ctx.input, ctx.input+3});
 }
@@ -1374,3 +1709,4 @@ bool EmitVswz(CompilerContext& ctx, Instruction& inst){
 bool EmitXor(CompilerContext& ctx, Instruction& inst){
     return false;
 }
+*/

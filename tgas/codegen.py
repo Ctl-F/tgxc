@@ -20,6 +20,7 @@ def process(input_file, output_file):
     pneumonics = {}
     errfunc = ""
     lines = []
+    handlers = []
 
     with open(input_file, "r") as f:
         lines = f.readlines()
@@ -76,22 +77,31 @@ def process(input_file, output_file):
             opcode = bits[0].strip()
             special_handle = bits[1].strip() if len(bits) > 1 else "nullptr"
 
+            if special_handle != "nullptr" and not special_handle in handlers:
+                handlers.append(special_handle)
+
             pneumonics[command_parts[0]].append({ "params": params, "opcode": opcode, "special_handle": special_handle })
 
     header_str = ["#ifdef INCLUDE_DATA_TABLE"]
 
+    mask = int("1" * mask_width, 2)
     bits = "0b%s" % ("1" * mask_width)
     header_str.append("#define PARAM_TYPE_MASK %s" % bits)
+    header_str.append("#define PARAM_MASK_WIDTH %s" % mask_width)
 
-    index = 1
+    index = 0
     for me in mask_enum:
         header_str.append("#define PARAM_TYPE_%s %s" % (me, index))
         index += 1
 
     header_str.append("typedef void(*InstructionHandler)(Instruction& instr, uint32_t paramid, std::vector<string_view>& params);")
-    header_str.append("void InvalidOperandParams(Instruction&, uint16_t, uint32_t, std::vector<string_view>&);")
+    header_str.append("void InvalidOperandParams(Instruction&, uint32_t, std::vector<string_view>&);")
 
-    header_str.append("struct TableEntry { uint16_t opcode; InstructionHandler handler };")
+    for handler in handlers:
+        header_str.append("void %s(Instruction&, uint32_t, std::vector<string_view>&);" % handler)
+    header_str.append("\n")
+
+    header_str.append("struct TableEntry { uint16_t opcode; InstructionHandler handler; };\n")
 
     for pneumonic in pneumonics:
         options = pneumonics[pneumonic]
@@ -103,7 +113,7 @@ def process(input_file, output_file):
 
             for param in option["params"]:
                 try:
-                    paramval = mask_enum.index(param) + 1
+                    paramval = mask_enum.index(param)
                 except ValueError:
                     print("Parameter Type %s is not defined (%s)" % (param, pneumonic))
 
@@ -113,22 +123,55 @@ def process(input_file, output_file):
 
         options.sort(key=lambda opt: opt["paramid"])
 
-        table_len = "0b%s" % ((("1" * mask_width) * len(options[-1]["params"])) if len(options[-1]["params"]) > 0 else 1)
-        header_str.append("#define %s_TABLE_LEN %s" % (pneumonic, table_len))
+        table_len = int("%s" % (("1" * mask_width) * len(options[-1]["params"])), 2) if len(options[-1]["params"]) > 0 else 0
+        #header_str.append("#define %s_TABLE_LEN %s\n" % (pneumonic, table_len+1))
 
-        header_str.append("TableEntry %s_ParamTable[] {" % pneumonic)
+        header_str.append("static std::unordered_map<uint32_t, TableEntry> %s_ParamTable {" % pneumonic);
 
-        tlen = int(table_len[2:], 2) if table_len != "0b" else 1
+        for i in range(table_len+1):
+            param_types = ""
+            pid = i
+            while (pid & mask) != 0:
+                atype = pid & mask
+                pid >>= mask_width
+                rtype = mask_enum[atype]
+                param_types = rtype + (", %s" % param_types if param_types != "" else "")
 
-        for i in range(tlen):
             for option in options:
                 if option["paramid"] == i:
-                    header_str.append("{ %s, %s }," % (option["opcode"], option["special_handle"]))
+                    header_str.append(f"    {{ 0x{i:04X}, TableEntry{{ {option['opcode']}, {option['special_handle']} }} }}, /* {param_types} */")
                     break
-            else:
-                header_str.append("{ %s, %s }," % ( 0xFFFF, "InvalidOperandParams"))
 
         header_str.append("};\n")
+
+        # header_str.append("TableEntry %s_ParamTable[%s] {" % (pneumonic, table_len+1))
+        #
+        # for i in range(table_len+1):
+        #
+        #     param_types = ""
+        #     pid = i
+        #     while (pid & mask) != 0:
+        #         atype = pid & mask
+        #         pid >>= mask_width
+        #
+        #         rtype = mask_enum[atype]
+        #         param_types = rtype + (", %s" % param_types if param_types != "" else "")
+        #
+        #     for option in options:
+        #         if option["paramid"] == i:
+        #             header_str.append(f"    /* {i:08X} */ {{ {option['opcode']}, {option['special_handle']} }}, /* {param_types} */")
+        #             break
+        #     else:
+        #         header_str.append(f"    /* {i:08X} */ {{ 0x{0xFFFF:04X}, InvalidOperandParams }}, /* {param_types} */" ) #"    { %s, %s }, /* %s */" % ( 0xFFFF, "InvalidOperandParams", param_types))
+        #
+        # header_str.append("};\n")
+
+    header_str.append("static std::unordered_map<std::string, std::unordered_map<uint32_t, TableEntry>*> TableMap {");
+
+    for pneumonic in pneumonics:
+        header_str.append(" { \"%s\", &%s_ParamTable }," % (pneumonic, pneumonic))
+
+    header_str.append("};\n")
 
     header_str.append("#endif //INCLUDE_DATA_TABLE")
 

@@ -12,7 +12,10 @@ RVec
 Table
 DeR32
 Imm
-Kwd
+Size8
+Size16
+Size32
+Size64
 %end
 
 nop > 0x0000
@@ -24,11 +27,11 @@ mov DeR32 Imm > 0x0005
 
 # Will need to be reordered to fit what the vm expects.
 # Default encoding will be out of order
-mov DeR32 Kwd Imm > 0x0006, HandleMovDr32C8
+mov DeR32 Size8 Imm > 0x0006
 mov Table R32 Imm > 0x0007, HandleMovToTblC8
 mov Table R32 R8 > 0x0008, HandleMovToTblR8
-mov R32 Table Imm > 0x0009, HandleMovFromTblC8
-mov R32 Table R8 > 0x000A, HandleMovFromTblR8
+mov R32 Table Imm > 0x0009
+mov R32 Table R8 > 0x000A
 
 mov R32 R64H > 0x000B
 mov R32 R64L > 0x000C
@@ -74,23 +77,23 @@ mclr R32 R32 R16 > 0x002F
 mclr R32 R32 R32 > 0x0030
 mclr R32 R32 R64 > 0x0031
 push R8 > 0x0032
-
-# HandlePushConst will have to also pivot to
-# 0x0035, 0x0037, 0x0039, 0x003B
-push Kwd Imm > 0x0033, HandlePushConst
+push Size8 Imm > 0x0033
 push R16 > 0x0034
+push Size16 Imm > 0x0035
 push R32 > 0x0036
+push Size32 Imm > 0x0037
 push R64 > 0x0038
+push Size64 > 0x0039
 push F32 > 0x003A
 pop R8 > 0x003C
 pop R16 > 0x003D
 pop R32 > 0x003E
 pop R64 > 0x003F
 pop F32 > 0x0040
-push Kwd > 0x0041, HandlePushAll
-pop Kwd > 0x0042, HandlePopAll
-sto DeR32 Table R8 R8 > 0x0043, HandleTableStore
-ld Table DeR32 R8 R8 > 0x0044, HandleTableLoad
+push > 0x0041
+pop > 0x0042
+tsto DeR32 Table R8 R8 > 0x0043
+tld Table DeR32 R8 R8 > 0x0044, HandleTableLoad
 
 add R32 R32 R32 > 0x0045
 add R32 R32 > 0x0045, HandleMathRegExpand
@@ -100,4 +103,314 @@ add R16 R16 R16 > 0x0047
 add R16 R16 > 0x0047, HandleMathRegExpand
 add R64 R64 R64 > 0x0048
 add R64 R64 > 0x0048, HandleMathRegExpand
-#todo
+add R32 R32 Imm > 0x0049
+add R32 Imm > 0x0049, HandleMathImmExpand
+add R8 R8 Imm > 0x004A
+add R8 Imm > 0x004A, HandleMathImmExpand
+add R16 R16 Imm > 0x004B
+add R16 Imm > 0x004B, HandleMathImmExpand
+add R64 R64 Imm > 0x004C
+add R64 Imm > 0x004C, HandleMathImmExpand
+add F32 F32 F32 > 0x00B6
+add F32 F32 > 0x00B6, HandleMathRegExpand
+add F32 F32 Imm > 0x00B7
+add F32 Imm > 0x00B7, HandleMathImmExpand
+
+sub R32 R32 R32 > 0x004D
+sub R32 R32 > 0x004D, HandleMathRegExpand
+sub R8 R8 R8 > 0x004E
+sub R8 R8 > 0x004E, HandleMathRegExpand
+sub R16 R16 R16 > 0x004F
+sub R16 R16 > 0x004F, HandleMathRegExpand
+sub R64 R64 R64 > 0x0050
+sub R64 R64 > 0x0050, HandleMathRegExpand
+sub R32 R32 Imm > 0x0051
+sub R32 Imm > 0x0051, HandleMathImmExpand
+sub R8 R8 Imm > 0x0052
+sub R8 Imm > 0x0052, HandleMathImmExpand
+sub R16 R16 Imm > 0x0053
+sub R16 Imm > 0x0053, HandleMathImmExpand
+sub R64 R64 Imm > 0x0054
+sub R64 Imm > 0x0054, HandleMathImmExpand
+sub F32 F32 F32 > 0x00B8
+sub F32 F32 > 0x00B8, HandleMathRegExpand
+sub F32 F32 Imm > 0x00B9
+sub F32 Imm > 0x00B9, HandleMathImmExpand
+
+mul R32 R32 R32 > 0x0055
+mul R32 R32 > 0x0055, HandleMathRegExpand
+mul R8 R8 R8 > 0x0056
+mul R8 R8 > 0x0056, HandleMathRegExpand
+mul R16 R16 R16 > 0x0057
+mul R16 R16 > 0x0057, HandleMathRegExpand
+mul R64 R64 R64 > 0x0058
+mul R64 R64 > 0x0058, HandleMathRegExpand
+mul R32 R32 Imm > 0x0059
+mul R32 Imm > 0x0059, HandleMathImmExpand
+mul R8 R8 Imm > 0x005A
+mul R8 Imm > 0x005A, HandleMathImmExpand
+mul R16 R16 Imm > 0x005B
+mul R16 Imm > 0x005B, HandleMathImmExpand
+mul R64 R64 Imm > 0x005C
+mul R64 Imm > 0x005C, HandleMathImmExpand
+mul F32 F32 F32 > 0x00BA
+mul F32 F32 > 0x00BA, HandleMathRegExpand
+mul F32 F32 Imm > 0x00BB
+mul F32 Imm > 0x00BB, HandleMathImmExpand
+
+div R32 R32 R32 > 0x005D
+div R32 R32 > 0x005D, HandleMathRegExpand
+div R8 R8 R8 > 0x005E
+div R8 R8 > 0x005E, HandleMathRegExpand
+div R16 R16 R16 > 0x005F
+div R16 R16 > 0x005F, HandleMathRegExpand
+div R64 R64 R64 > 0x0060
+div R64 R64 > 0x0060, HandleMathRegExpand
+div R32 R32 Imm > 0x0061
+div R32 Imm > 0x0061, HandleMathImmExpand
+div R8 R8 Imm > 0x0062
+div R8 Imm > 0x0062, HandleMathImmExpand
+div R16 R16 Imm > 0x0063
+div R16 Imm > 0x0063, HandleMathImmExpand
+div R64 R64 Imm > 0x0064
+div R64 Imm > 0x0064, HandleMathImmExpand
+div F32 F32 F32 > 0x00BC
+div F32 F32 > 0x00BC, HandleMathRegExpand
+div F32 F32 Imm > 0x00BD
+div F32 Imm > 0x00BD, HandleMathImmExpand
+
+mod R32 R32 R32 > 0x0065
+mod R32 R32 > 0x0065, HandleMathRegExpand
+mod R8 R8 R8 > 0x0066
+mod R8 R8 > 0x0066, HandleMathRegExpand
+mod R16 R16 R16 > 0x0067
+mod R16 R16 > 0x0067, HandleMathRegExpand
+mod R64 R64 R64 > 0x0068
+mod R64 R64 > 0x0068, HandleMathRegExpand
+mod R32 R32 Imm > 0x0069
+mod R32 Imm > 0x0069, HandleMathImmExpand
+mod R8 R8 Imm > 0x006A
+mod R8 Imm > 0x006A, HandleMathImmExpand
+mod R16 R16 Imm > 0x006B
+mod R16 Imm > 0x006B, HandleMathImmExpand
+mod R64 R64 Imm > 0x006C
+mod R64 Imm > 0x006C, HandleMathImmExpand
+mod F32 F32 F32 > 0x00BE
+mod F32 F32 > 0x00BE, HandleMathRegExpand
+mod F32 F32 Imm > 0x00BF
+mod F32 Imm > 0x00BF, HandleMathImmExpand
+
+neg R32 R32 > 0x006D
+neg R32 > 0x006D, HandleMathRegExpand
+neg R8 R8 > 0x006E
+neg R8 > 0x006E, HandleMathRegExpand
+neg R16 R16 > 0x006F
+neg R16 > 0x006F, HandleMathRegExpand
+neg R64 R64 > 0x0070
+neg R64 > 0x0070, HandleMathRegExpand
+
+inc R32 > 0x0071
+inc R8 > 0x0072
+inc R16 > 0x0073
+inc R64 > 0x0074
+
+dec R32 > 0x0075
+dec R8 > 0x0076
+dec R16 > 0x0077
+dec R64 > 0x0078
+
+rbr R32 R32 R32 > 0x0079
+rbr R32 R32 > 0x0079, HandleMathRegExpand
+rbr R8 R8 R8 > 0x007A
+rbr R8 R8 > 0x007A, HandleMathRegExpand
+rbr R16 R16 R16 > 0x007B
+rbr R16 R16 > 0x007B, HandleMathRegExpand
+rbr R64 R64 R64 > 0x007C
+rbr R64 R64 > 0x007C, HandleMathRegExpand
+rbr R32 R32 Imm > 0x007D
+rbr R32 Imm > 0x007D, HandleMathImmExpand
+rbr R8 R8 Imm > 0x007E
+rbr R8 Imm > 0x007E, HandleMathImmExpand
+rbr R16 R16 Imm > 0x007F
+rbr R16 Imm > 0x007F, HandleMathImmExpand
+rbr R64 R64 Imm > 0x0080
+rbr R64 Imm > 0x0080, HandleMathImmExpand
+
+rbl R32 R32 R32 > 0x0081
+rbl R32 R32 > 0x0081, HandleMathRegExpand
+rbl R8 R8 R8 > 0x0082
+rbl R8 R8 > 0x0082, HandleMathRegExpand
+rbl R16 R16 R16 > 0x0083
+rbl R16 R16 > 0x0083, HandleMathRegExpand
+rbl R64 R64 R64 > 0x0084
+rbl R64 R64 > 0x0084, HandleMathRegExpand
+rbl R32 R32 Imm > 0x0085
+rbl R32 Imm > 0x0085, HandleMathImmExpand
+rbl R8 R8 Imm > 0x0086
+rbl R8 Imm > 0x0086, HandleMathImmExpand
+rbl R16 R16 Imm > 0x0087
+rbl R16 Imm > 0x0087, HandleMathImmExpand
+rbl R64 R64 Imm > 0x0088
+rbl R64 Imm > 0x0088, HandleMathImmExpand
+
+cmp R32 R32 > 0x0089
+cmp R8 R8 > 0x008A
+cmp R16 R16 > 0x008B
+cmp R64 R64 > 0x008C
+cmp R32 Imm > 0x008D
+cmp R8 Imm > 0x008E
+cmp R16 Imm > 0x008F
+cmp R64 Imm > 0x0090
+cmp F32 F32 > 0x00C4
+cmp F32 Imm > 0x00C5
+
+land R32 R32 R32 > 0x0091
+land R32 R32 > 0x0091, HandleMathRegExpand
+land R8 R8 R8 > 0x0092
+land R8 R8 > 0x0092, HandleMathRegExpand
+land R16 R16 R16 > 0x0093
+land R16 R16 > 0x0093, HandleMathRegExpand
+land R64 R64 R64 > 0x0094
+land R64 R64 > 0x0094, HandleMathRegExpand
+
+lor R32 R32 R32 > 0x0095
+lor R32 R32 > 0x0095, HandleMathRegExpand
+lor R8 R8 R8 > 0x0096
+lor R8 R8 > 0x0096, HandleMathRegExpand
+lor R16 R16 R16 > 0x0097
+lor R16 R16 > 0x0097, HandleMathRegExpand
+lor R64 R64 R64 > 0x0098
+lor R64 R64 > 0x0098, HandleMathRegExpand
+
+lnot R32 R32 > 0x0099
+lnot R32 > 0x0099, HandleMathRegExpand
+lnot R8 R8 > 0x009A
+lnot R8 > 0x009A, HandleMathRegExpand
+lnot R16 R16 > 0x009B
+lnot R16 > 0x009B, HandleMathRegExpand
+lnot R64 R64 > 0x009C
+lnot R64 > 0x009C, HandleMathRegExpand
+
+and R32 R32 R32 > 0x009D
+and R32 R32 > 0x009D, HandleMathRegExpand
+and R8 R8 R8 > 0x009E
+and R8 R8 > 0x009E, HandleMathRegExpand
+and R16 R16 R16 > 0x009F
+and R16 R16 > 0x009F, HandleMathRegExpand
+and R64 R64 R64 > 0x00A0
+and R64 R64 > 0x00A0, HandleMathRegExpand
+
+xor R32 R32 R32 > 0x00A2
+xor R32 R32 > 0x00A2, HandleMathRegExpand
+xor R8 R8 R8 > 0x00A3
+xor R8 R8 > 0x00A3, HandleMathRegExpand
+xor R16 R16 R16 > 0x00A4
+xor R16 R16 > 0x00A4, HandleMathRegExpand
+xor R64 R64 R64 > 0x00A5
+xor R64 R64 > 0x00A5, HandleMathRegExpand
+
+or R32 R32 R32 > 0x00A6
+or R32 R32 > 0x00A6, HandleMathRegExpand
+or R8 R8 R8 > 0x00A7
+or R8 R8 > 0x00A7, HandleMathRegExpand
+or R16 R16 R16 > 0x00A8
+or R16 R16 > 0x00A8, HandleMathRegExpand
+or R64 R64 R64 > 0x00A9
+or R64 R64 > 0x00A9, HandleMathRegExpand
+
+not R32 R32 > 0x00AA
+not R32 > 0x00AA, HandleMathRegExpand
+not R8 R8 > 0x00AB
+not R8 > 0x00AB, HandleMathRegExpand
+not R16 R16 > 0x00AC
+not R16 > 0x00AC, HandleMathRegExpand
+not R64 R64 > 0x00AD
+not R64 > 0x00AD, HandleMathRegExpand
+
+cmxb R32 R32 R32 R32 > 0x00AE
+cmxb F32 F32 F32 F32 > 0x00AF
+sqr R32 R32 > 0x00B0
+sqr R64 R64 > 0x00B1
+abs R8 R8 > 0x00B2
+abs R8 > 0x00B2, HandleMathRegExpand
+abs R16 R16 > 0x00B3
+abs R16 > 0x00B3, HandleMathRegExpand
+abs R32 R32 > 0x00B4
+abs R32 > 0x00B4, HandleMathRegExpand
+abs R64 R64 > 0x00B5
+abs R64 > 0x00B5, HandleMathRegExpand
+
+floor F32 F32 > 0x00C0
+ceil F32 F32 > 0x00C1
+round F32 F32 > 0x00C2
+sqrt F32 F32 > 0x00C3
+
+vnorm RVec > 0x00C6
+vadd RVec RVec > 0x00C7
+vsub RVec RVec > 0x00C8
+vmul RVec RVec > 0x00C9
+vdiv RVec RVec > 0x00CA
+vdot F32 RVec RVec > 0x00CB
+vlen F32 RVec > 0x00CC
+cos F32 F32 > 0x00CD
+cos F32 Imm > 0x00CE
+sin F32 F32 > 0x00CF
+sin F32 Imm > 0x00D0
+tan F32 F32 > 0x00D1
+tan F32 Imm > 0x00D2
+acos F32 F32 > 0x00D3
+acos F32 Imm > 0x00D4
+asin F32 F32 > 0x00D5
+asin F32 Imm > 0x00D6
+atan F32 F32 > 0x00D7
+atan F32 Imm > 0x00D8
+atan F32 F32 F32 > 0x00D9
+
+bcosmxd F32 F32 F32 F32 F32 > 0x00DA
+bsinmxd F32 F32 F32 F32 F32 > 0x00DB
+btanmxd F32 F32 F32 F32 F32 > 0x00DC
+
+neg F32 F32 > 0x00DD
+
+vswz RVec RVec R16 > 0x00DE
+pow F32 F32 F32 > 0x00DF
+log F32 F32 > 0x00E0
+ln F32 F32 > 0x00E1
+epow F32 F32 > 0x00E2
+ldpi F32 > 0x00E3
+lde F32 > 0x00E4
+inv F32 F32 > 0x00E5
+abs F32 F32 > 0x00E6
+
+jmp R32 > 0x00E7
+jmp Imm > 0x00E8
+jz R32 R32 > 0x00E9, HandleElseCodeReg
+jz R32 Imm > 0x00E9, HandleElseCode
+jz Imm > 0x00EA
+jnz R32 R32 > 0x00EB, HandleElseCodeReg
+jnz R32 Imm > 0x00EB, HandleElseCode
+jnz Imm > 0x00EC
+jz R32 > 0x00ED
+jnz R32 > 0x00EE
+jgt R32 R32 > 0x00EF, HandleElseCodeReg
+jgt R32 Imm > 0x00EF, HandleElseCode
+jgt R32 > 0x00EF, HandleNoElseCode
+jgt Imm > 0x00F0
+jlt R32 R32 > 0x00F1, HandleElseCodeReg
+jlt R32 Imm > 0x00F1, HandleElseCode
+jlt R32 > 0x00F1, HandleNoElseCode
+jlt Imm > 0x00F2
+jge R32 R32 > 0x00F3, HandleElseCodeReg
+jge R32 Imm > 0x00F3, HandleElseCode
+jge R32 > 0x00F3, HandleNoElseCode
+jge Imm > 0x00F4
+jle R32 R32 > 0x00F5, HandleElseCodeReg
+jle R32 Imm > 0x00F5, HandleElseCode
+jle R32 > 0x00F5, HandleNoElseCode
+jle Imm > 0x00F6
+ret > 0x010B
+hlt > 0x010C
+int R8 > 0x010D
+int Imm > 0x010E
+
+syscall Imm > 0x0115

@@ -29,32 +29,42 @@ int main(void) {
 // Next step is make an assembler and test the instructions
 
 int load_rom(TGXContext* ctx) {
-    //TODO: load from file
+    FILE *f = fopen("./root/boot/krom", "rb");
+    if (!f) {
+        perror("Failed to open kernel rom file");
+        return TGX_ERROR;
+    }
 
-    Instruction* h = (Instruction*)ctx->Memory.rom_begin;
+    fseek(f, 0, SEEK_END);
+    uint64_t file_size = ftell(f);
+    rewind(f);
 
-    h->opcode = 0x000F;
-    h->params[0] = 0x00;
-    h->const_i32 = 2;
-    h++;
+    unsigned char *buffer = malloc(file_size);
+    if (!buffer) {
+        perror("Could not allocate rom buffer");
+        fclose(f);
+        return TGX_ERROR;
+    }
 
-    h->opcode = 0x000F;
-    h->params[0] = 0x01;
-    h->const_i32 = 3;
-    h++;
+    size_t bytes_read = fread(buffer, 1, file_size, f);
+    if (bytes_read != file_size) {
+        perror("File read error");
+        free(buffer);
+        fclose(f);
+        return TGX_ERROR;
+    }
 
-    h->opcode = 0x0045;
-    h->params[0] = 0x02;
-    h->params[1] = 0x00;
-    h->ext_params[0] = 0x01;
-    h++;
+    if (bytes_read > ROM_SIZE) {
+        perror("Kernel rom file is too large.");
+        free(buffer);
+        fclose(f);
+        return TGX_ERROR;
+    }
 
-    h->opcode = 0x0115;
-    h->const_i32 = 0;
-    h++;
+    memcpy(ctx->Memory.rom_begin, buffer, bytes_read);
 
-    h->opcode = 0x010C;
-
+    free(buffer);
+    fclose(f);
     return TGX_SUCCESS;
 }
 
@@ -62,12 +72,115 @@ uint32_t swi_handler(void* context, uint32_t code) {
     TGXContext* ctx = context;
 
     switch (code) {
-        case 0x00000000:
+        case 0xF0000000:
             for (int i=0; i< REG32_COUNT; i++) {
                 printf("%2X: %8X (%u)\n", i, ctx->PU.gp32[i].full, ctx->PU.gp32[i].full);
             }
             break;
+        case 0xF0000001:
+            const char* str = (const char*)(ctx->Memory.memory_begin + ctx->PU.gp32[0].full);
+            while (*str) {
+                char ch = *str;
+                if (ch == '%') {
+                    str++;
+                    if (!str) {
+                        putc(ch, stdout);
+                        break;
+                    }
+                    switch (*str) {
+                        case 'd': {
+                            int32_t val = *(int32_t*)(ctx->Memory.memory_begin + ctx->PU.gp32[REG_SP].full);
+                            ctx->PU.gp32[REG_SP].full += sizeof(int32_t);
+                            printf("%d", val);
+                            break;
+                        }
+                        case 'u': {
+                            uint32_t val = *(uint32_t*)(ctx->Memory.memory_begin + ctx->PU.gp32[REG_SP].full);
+                            ctx->PU.gp32[REG_SP].full += sizeof(uint32_t);
+                            printf("%u", val);
+                            break;
+                        }
+                        case 'x': {
+                            uint32_t val = *(uint32_t*)(ctx->Memory.memory_begin + ctx->PU.gp32[REG_SP].full);
+                            ctx->PU.gp32[REG_SP].full += sizeof(uint32_t);
+                            printf("%8X", val);
+                            break;
+                        }
+                        case 'f': {
+                            float val = *(float*)(ctx->Memory.memory_begin + ctx->PU.gp32[REG_SP].full);
+                            ctx->PU.gp32[REG_SP].full += sizeof(float);
+                            printf("%f", val);
+                            break;
+                        }
+                        case 's': {
+                            const char* str = (const char*)(ctx->Memory.memory_begin + ctx->PU.gp32[REG_SP].full);
+                            ctx->PU.gp32[REG_SP].full += sizeof(uint32_t);
+                            printf("%s", str);
+                            break;
+                        }
+                        case 'l': {
+                            int64_t val = *(int64_t*)(ctx->Memory.memory_begin + ctx->PU.gp32[REG_SP].full);
+                            ctx->PU.gp32[REG_SP].full += sizeof(int64_t);
+                            printf("%ld", val);
+                            break;
+                        }
+                        case 'w': {
+                            uint64_t val = *(uint64_t*)(ctx->Memory.memory_begin + ctx->PU.gp32[REG_SP].full);
+                            ctx->PU.gp32[REG_SP].full += sizeof(uint64_t);
+                            printf("%lu", val);
+                            break;
+                        }
+                        case 'z': {
+                            uint64_t val = *(uint64_t*)(ctx->Memory.memory_begin + ctx->PU.gp32[REG_SP].full);
+                            ctx->PU.gp32[REG_SP].full += sizeof(uint64_t);
+                            printf("%16lX", val);
+                            break;
+                        }
+                        default:
+                            putc(ch, stdout);
+                            putc(*str, stdout);
+                            break;
+                    }
+                    str++;
+                    continue;
+                }
+                putc(ch, stdout);
+                str++;
+            }
+            break;
+        case 0xF0000002: {
+            // scanf   RA::FmtPointer (expects a single entry) RB::MemoryPtr (expects it to be big enough for the entry)
+            char buffer[256];
+            char* fmt = (char*)(ctx->Memory.memory_begin + ctx->PU.gp32[REG_RA].full);
+            void* dest = (ctx->Memory.memory_begin + ctx->PU.gp32[REG_RB].full);
+            fgets(buffer, sizeof(buffer), stdin);
+            sscanf(buffer, fmt, dest);
+            break;
+        }
+        case 0xF0000003: {
+            // fgets RA:BufferPointer RB::BufferSize
+            char* buffer = (char*)(ctx->Memory.memory_begin + ctx->PU.gp32[REG_RA].full);
+            uint32_t size = ctx->PU.gp32[REG_RB].full;
+            fgets(buffer, size, stdin);
+            break;
+        }
+        case 0xF0000004: {
+            // scanf --> stores result directly into RA
+            scanf("%d", &ctx->PU.gp32[REG_RA].full);
+            break;
+        }
+        case 0xF0000005: {
+            // getchar --> RA
+            ctx->PU.gp32[REG_RA].full = getchar();
+            break;
+        }
+        case 0xF0000006: {
+            // putc (RA)
+            putc(ctx->PU.gp32[REG_RA].full, stdout);
+            break;
+        }
         default:
+            printf("Unknown syscode: 0x%08X (%u)\n", code, code);
             break;
     }
 

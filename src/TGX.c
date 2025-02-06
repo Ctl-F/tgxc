@@ -48,6 +48,12 @@ void free_principle_memory(PrincipleMemory* mem){
 int init_program_thread(ProgramThread* pu) {
     // enable the pu
     pu->gp32[REG_PF].full = TGX_PF_Flag_SysActiveBit;
+
+    pu->gp32[REG_SH].full = ROM_SIZE + PROGRAM_CACHE_SIZE;
+    pu->gp32[REG_SB].full = (ROM_SIZE + PROGRAM_CACHE_SIZE) - DEFAULT_STACK_SIZE;
+
+    pu->gp32[REG_SP].full = pu->gp32[REG_SH].full;
+
     return TGX_SUCCESS;
 }
 
@@ -128,7 +134,8 @@ static uint64_t ProfilerTimestamp_Start_, ProfilerTimestamp_End_;
 
 #define GEN_FLAG_IS_ZERO(reg) (((reg) == 0) << TGX_PF_Shift_ZeroBit)
 
-#define MEMPTR(type, sys, index) (type*)(sys->Memory.program_cache_begin + (index))
+//TODO: Use memprotect to enfore ROM in allocated ROM section
+#define MEMPTR(type, sys, index) (type*)(sys->Memory.memory_begin + (index))
 #define MEMACCESS(type, sys, index) *MEMPTR(type, sys, index)
 //#define MEMACCESS(type, sys, index) *(type*)(sys->Memory.program_cache_begin + (index))
 
@@ -234,10 +241,6 @@ int program_thread_exec(TGXContext* sys){
 
     TGX_PROFILER_INITIALIZE();
 
-    // TODO: Implement OpCodes (We're finally going to be programming and not just setting up framework! Yay)
-    // TODO: Initial Dispatch
-    // TODO: Initialize IP to point to the correct address in ROM
-    // TODO: Load ROM
     // TODO: Extension Ports
     // TODO: Graphics API
     Instruction instruction;
@@ -3355,7 +3358,7 @@ int program_thread_exec(TGXContext* sys){
     TGX_PROFILE_CALL(JLTR32, 0x00F1);
 
     REG32(sys, REG_JR) = REG32(sys, REG_IP) + sizeof(Instruction);
-    if ((REG32(sys, REG_PF) & TGX_PF_Flag_NegBit)) {
+    if (REG32(sys, REG_PF) & TGX_PF_Flag_NegBit) {
         REG32(sys, REG_IP) = REG32(sys, instruction.params[0]);
         TGX_PROFILE_END(JGTR32, 0x00EF);
         TGX_DISPATCH(_jTable, instruction, *sys);
@@ -3435,7 +3438,23 @@ int program_thread_exec(TGXContext* sys){
 
     TGX_CASE(JLER32):
     TGX_PROFILE_CALL(JLER32, 0x00F5);
-//#error "Not Implemented"
+
+    REG32(sys, REG_JR) = REG32(sys, REG_IP) + sizeof(Instruction);
+    if (REG32(sys, REG_PF) & (TGX_PF_Flag_NegBit | TGX_PF_Flag_ZeroBit)) {
+        REG32(sys, REG_IP) = REG32(sys, instruction.params[0]);
+        TGX_PROFILE_END(JGTR32, 0x00EF);
+        TGX_DISPATCH(_jTable, instruction, *sys);
+    }
+    else if (instruction.params[1] & TGX_JMP_ELSE_FLAG) {
+        t32 = instruction.const_i32;
+        if (instruction.params[1] & TGX_JMP_USE_REG_FLAG) {
+            t32 = REG32(sys, t32);
+        }
+        REG32(sys, REG_IP) = t32;
+        TGX_PROFILE_END(JGTR32, 0x00EF);
+        TGX_DISPATCH(_jTable, instruction, *sys);
+    }
+
     TGX_PROFILE_END(JLER32, 0x00F5);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
@@ -3444,7 +3463,14 @@ int program_thread_exec(TGXContext* sys){
 
     TGX_CASE(JLEC32):
     TGX_PROFILE_CALL(JLEC32, 0x00F6);
-//#error "Not Implemented"
+
+    if (REG32(sys, REG_PF) & (TGX_PF_Flag_ZeroBit | TGX_PF_Flag_NegBit)) {
+        REG32(sys, REG_JR) = REG32(sys, REG_IP) + sizeof(Instruction);
+        REG32(sys, REG_IP) = instruction.const_i32;
+        TGX_PROFILE_END(JGEC32, 0x00F4);
+        TGX_DISPATCH(_jTable, instruction, *sys);
+    }
+
     TGX_PROFILE_END(JLEC32, 0x00F6);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);

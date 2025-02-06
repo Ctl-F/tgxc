@@ -324,7 +324,7 @@ vmul Vec, Vec
 vdiv Vec, Vec
 vdot FReg32, Vec, Vec
 vlen FReg32, Vec
-ldmsk Reg16, Mask   load swizzle mask to reg16
+##ldmsk Reg16, Mask   load swizzle mask to reg16
 vswz Vec, Vec, Reg16
     copy vector using swizzle mask to the dest vector
 
