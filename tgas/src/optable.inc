@@ -28,6 +28,7 @@ void HandleMathImmExpand(Instruction&, uint32_t, std::vector<string_view>&);
 void HandleElseCodeReg(Instruction&, uint32_t, std::vector<string_view>&);
 void HandleElseCode(Instruction&, uint32_t, std::vector<string_view>&);
 void HandleNoElseCode(Instruction&, uint32_t, std::vector<string_view>&);
+void EncodeBreak(Instruction&, uint32_t, std::vector<string_view>&);
 
 
 struct TableEntry { uint16_t opcode; InstructionHandler handler; };
@@ -612,6 +613,11 @@ static std::unordered_map<uint32_t, TableEntry> syscall_ParamTable {
     { 0x000B, TableEntry{ 0x0115, nullptr } }, /* Imm */
 };
 
+static std::unordered_map<uint32_t, TableEntry> break_ParamTable {
+    { 0x0000, TableEntry{ 0x0116, EncodeBreak } }, /*  */
+    { 0x000B, TableEntry{ 0x0116, EncodeBreak } }, /* Imm */
+};
+
 static std::unordered_map<std::string, std::unordered_map<uint32_t, TableEntry>*> TableMap {
  { "nop", &nop_ParamTable },
  { "mov", &mov_ParamTable },
@@ -686,6 +692,7 @@ static std::unordered_map<std::string, std::unordered_map<uint32_t, TableEntry>*
  { "hlt", &hlt_ParamTable },
  { "int", &int_ParamTable },
  { "syscall", &syscall_ParamTable },
+ { "break", &break_ParamTable },
 };
 
 #endif //INCLUDE_DATA_TABLE

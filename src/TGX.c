@@ -153,6 +153,8 @@ static uint64_t ProfilerTimestamp_Start_, ProfilerTimestamp_End_;
 #define GEN_FLAG_IS_NEG(reg, size) (((int##size##_t)(reg) < 0) << TGX_PF_Shift_NegBit)
 #define GEN_FLAG_IS_NEGF32(reg) ((reg < 0.0f) << TGX_PF_Shift_NegBit)
 
+static int LaunchDebugShell(TGXContext* ctx);
+
 int program_thread_exec(TGXContext* sys){
     void* _jTable[] = {
 /* 0x0000 */        TGX_ADDR(NOP),               TGX_ADDR(MOVR32_R32),     TGX_ADDR(MOVR16_R16),     TGX_ADDR(MOVR8_R8),
@@ -3762,7 +3764,9 @@ int program_thread_exec(TGXContext* sys){
 
     TGX_CASE(BREAK):
     TGX_PROFILE_CALL(BREAK, 0x0116);
-//#error "Not Implemented"
+
+    LaunchDebugShell(sys);
+
     TGX_PROFILE_END(BREAK, 0x0116);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
@@ -3848,3 +3852,962 @@ PROGRAM_HALT:
     return TGX_SUCCESS;
 }
 
+enum COMMANDS {
+    Cmd_Unknown,
+    Cmd_Help,
+    Cmd_Quit,
+    Cmd_PrintReg,
+    Cmd_PeekStack,
+    Cmd_PeekMem,
+    Cmd_PrintLastInst,
+    Cmd_PrintNextInst,
+    Cmd_Push8,
+    Cmd_Push16,
+    Cmd_Push32,
+    Cmd_Push64,
+    Cmd_Pop8,
+    Cmd_Pop16,
+    Cmd_Pop32,
+    Cmd_Pop64,
+    Cmd_SetReg,
+    Cmd_Kill,
+    Cmd_Step,
+};
+
+enum REGS {
+    UNDEF, RA, RB, RC, RD, RE, RF, RX, RY, RZ, RW, RI, RJ, RK, RL, IP, JR, SB, SP, SH, PF,
+    M0, M1, X0, Y0, Z0, W0, X1, Y1, Z1, W1, X2, Y2, Z2, W2, X3, Y3, Z3, W3,
+};
+
+static void DebugShellInit(void) {
+    printf("TGX Serial Debug Shell V0.1\n");
+    printf("type 'help' for list of commands\n");
+    printf("type 'quit' to resume execution.\n");
+    printf("--------------------------------\n");
+}
+
+static void ShellHelp(void) {
+    printf("help               Displays Command List\n");
+    printf("cont               Resumes Execution\n");
+    printf("kill               Kills Machine Execution\n");
+    printf("print [reg]        Displays Contents of Register\n");
+    printf("set   [reg] [val]  Sets the register to the value\n");
+    printf("next               Shows the opcode of the next instruction\n");
+    printf("last               Shows the opcode of the previous instruction\n");
+    printf("peek [addr]        Shows the contents of memory at the address\n");
+    printf("head               Shows the contents at the top of the stack\n");
+    printf("step               Steps forward by one instruction\n");
+}
+
+static uint32_t s_TmpBreak = {0};
+static bool s_IsTmp = {0};
+
+static void SkipSpaces(const char** ptr) {
+    while (**ptr && **ptr == ' ') (*ptr)++;
+}
+
+static int ParseCommand(const char** ptr) {
+    SkipSpaces(ptr);
+    if (!**ptr) {
+        return Cmd_Unknown;
+    }
+
+    if (strncmp(*ptr, "help", 4) == 0 && !isalnum((*ptr)[4])){ (*ptr)+=4; return Cmd_Help; }
+    if (strncmp(*ptr, "cont", 4) == 0 && !isalnum((*ptr)[4])){ (*ptr)+=4; return Cmd_Quit; }
+    if (strncmp(*ptr, "kill", 4) == 0 && !isalnum((*ptr)[4])){ (*ptr)+=4; return Cmd_Kill; }
+    if (strncmp(*ptr, "print", 5) == 0 && !isalnum((*ptr)[5])){ (*ptr)+=5; return Cmd_PrintReg; }
+    if (strncmp(*ptr, "set",  3) == 0 && !isalnum((*ptr)[3])){ (*ptr)+=3; return Cmd_SetReg; }
+    if (strncmp(*ptr, "next", 4) == 0 && !isalnum((*ptr)[4])){ (*ptr)+=4; return Cmd_PrintNextInst; }
+    if (strncmp(*ptr, "last", 4) == 0 && !isalnum((*ptr)[4])){ (*ptr)+=4; return Cmd_PrintLastInst; }
+    if (strncmp(*ptr, "peek", 4) == 0 && !isalnum((*ptr)[4])){ (*ptr)+=4; return Cmd_PeekMem; }
+    if (strncmp(*ptr, "head", 4) == 0 && !isalnum((*ptr)[4])){ (*ptr)+=4; return Cmd_PeekStack; }
+    if (strncmp(*ptr, "step", 4) == 0 && !isalnum((*ptr)[4])){ (*ptr)+=4; return Cmd_Step; }
+    return Cmd_Unknown;
+}
+static int ParseReg(const char** ptr) {
+    SkipSpaces(ptr);
+
+    if (!**ptr) {
+        return UNDEF;
+    }
+
+    char a, b, c;
+    a = (*ptr)[0];
+    b = (*ptr)[1];
+    c = (*ptr)[2];
+
+    if (isalnum(c)) {
+        return UNDEF;
+    }
+
+    if (a == 'r' && b == 'a') return RA;
+    if (a == 'r' && b == 'b') return RB;
+    if (a == 'r' && b == 'c') return RC;
+    if (a == 'r' && b == 'd') return RD;
+    if (a == 'r' && b == 'e') return RE;
+    if (a == 'r' && b == 'f') return RF;
+    if (a == 'r' && b == 'x') return RX;
+    if (a == 'r' && b == 'y') return RY;
+    if (a == 'r' && b == 'z') return RZ;
+    if (a == 'r' && b == 'w') return RW;
+    if (a == 'r' && b == 'i') return RI;
+    if (a == 'r' && b == 'j') return RJ;
+    if (a == 'r' && b == 'k') return RK;
+    if (a == 'r' && b == 'l') return RL;
+    if (a == 'i' && b == 'p') return IP;
+    if (a == 'p' && b == 'f') return PF;
+    if (a == 'j' && b == 'r') return JR;
+    if (a == 's' && b == 'b') return SB;
+    if (a == 's' && b == 'h') return SH;
+    if (a == 's' && b == 'p') return SP;
+    if (a == 'm' && b == '0') return M0;
+    if (a == 'm' && b == '1') return M0;
+    if (a == 'x' && b == '0') return X0;
+    if (a == 'x' && b == '1') return X1;
+    if (a == 'x' && b == '2') return X2;
+    if (a == 'x' && b == '3') return X3;
+    if (a == 'y' && b == '0') return Y0;
+    if (a == 'y' && b == '1') return Y1;
+    if (a == 'y' && b == '2') return Y2;
+    if (a == 'y' && b == '3') return Y3;
+    if (a == 'z' && b == '0') return Z0;
+    if (a == 'z' && b == '1') return Z1;
+    if (a == 'z' && b == '2') return Z2;
+    if (a == 'z' && b == '3') return Z3;
+    if (a == 'w' && b == '0') return W0;
+    if (a == 'w' && b == '1') return W1;
+    if (a == 'w' && b == '2') return W2;
+    if (a == 'w' && b == '3') return W3;
+
+    return UNDEF;
+}
+
+uint64_t GetReg(TGXContext* ctx, int reg, int* is_float) {
+    switch (reg) {
+        default:
+            return 0;
+        case RA:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_RA);
+        case RB:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_RB);
+        case RC:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_RC);
+        case RD:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_RD);
+        case RE:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_RE);
+        case RF:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_RF);
+        case RX:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_RX);
+        case RY:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_RY);
+        case RZ:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_RZ);
+        case RW:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_RW);
+        case RI:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_RI);
+        case RJ:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_RJ);
+        case RK:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_RK);
+        case RL:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_RL);
+        case IP:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_IP);
+        case JR:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_JR);
+        case SB:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_SB);
+        case SH:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_SH);
+        case SP:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_SP);
+        case PF:
+            if (is_float) *is_float = false;
+            return REG32(ctx, REG_PF);
+        case M0:
+            if (is_float) *is_float = false;
+            return REG64(ctx, 0);
+        case M1:
+            if (is_float) *is_float = false;
+            return REG64(ctx, 1);
+        case X0:
+            if (is_float) *is_float = true;
+            return *(uint32_t*)&REGF32(ctx, REG_FX0);
+        case Y0:
+            if (is_float) *is_float = true;
+            return *(uint32_t*)&REGF32(ctx, REG_FY0);
+        case Z0:
+            if (is_float) *is_float = true;
+            return *(uint32_t*)&REGF32(ctx, REG_FZ0);
+        case W0:
+            if (is_float) *is_float = true;
+            return *(uint32_t*)&REGF32(ctx, REG_FW0);
+        case X1:
+            if (is_float) *is_float = true;
+            return *(uint32_t*)&REGF32(ctx, REG_FX1);
+        case Y1:
+            if (is_float) *is_float = true;
+            return *(uint32_t*)&REGF32(ctx, REG_FY1);
+        case Z1:
+            if (is_float) *is_float = true;
+            return *(uint32_t*)&REGF32(ctx, REG_FZ1);
+        case W1:
+            if (is_float) *is_float = true;
+            return *(uint32_t*)&REGF32(ctx, REG_FW1);
+        case X2:
+            if (is_float) *is_float = true;
+            return *(uint32_t*)&REGF32(ctx, REG_FX2);
+        case Y2:
+            if (is_float) *is_float = true;
+            return *(uint32_t*)&REGF32(ctx, REG_FY2);
+        case Z2:
+            if (is_float) *is_float = true;
+            return *(uint32_t*)&REGF32(ctx, REG_FZ2);
+        case W2:
+            if (is_float) *is_float = true;
+            return *(uint32_t*)&REGF32(ctx, REG_FW2);
+        case X3:
+            if (is_float) *is_float = true;
+            return *(uint32_t*)&REGF32(ctx, REG_FX3);
+        case Y3:
+            if (is_float) *is_float = true;
+            return *(uint32_t*)&REGF32(ctx, REG_FY3);
+        case Z3:
+            if (is_float) *is_float = true;
+            return *(uint32_t*)&REGF32(ctx, REG_FZ3);
+        case W3:
+            if (is_float) *is_float = true;
+            return *(uint32_t*)&REGF32(ctx, REG_FW3);
+    }
+
+}
+
+static double ParseVal(const char** ptr) {
+    SkipSpaces(ptr);
+
+    char *end;
+    double value = strtod(*ptr, &end);
+
+    if (end == *ptr) {
+        return NAN;
+    }
+
+    return value;
+}
+
+static const char* GetInstStr(uint16_t instr);
+
+static void PrintInst(Instruction* inst) {
+    if ((inst-1)->opcode == 0x0000) {
+        printf("%4u: ", (inst-1)->const_i32);
+    }
+
+    uint32_t opcode = inst->opcode;
+    uint32_t param0 = inst->params[0];
+    uint32_t param1 = inst->params[1];
+
+    const char* inst_str = GetInstStr((uint16_t)opcode);
+
+    if (inst_str == NULL) {
+        inst_str = "???";
+    }
+
+    printf("%s[%04X] %02X %02X %08X (%f)\n", inst_str, opcode, param0, param1, inst->const_i32, inst->const_f32);
+}
+
+static void StepNext(TGXContext* ctx, Instruction* currentInst) {
+    uint32_t ip = REG32(ctx, REG_IP);
+
+    //Instruction* nextInstr = currentInst + 1;
+
+    ip += sizeof(Instruction) * 2;
+    currentInst += 2;
+    if (!s_IsTmp) {
+        currentInst++;
+        ip += sizeof(Instruction);
+        //nextInstr++;
+    }
+
+    Instruction* nextInstr = currentInst - 1;
+
+    switch (nextInstr->opcode) {
+        case 0x00E7:
+            ip = REG32(ctx, nextInstr->params[0]) - sizeof(Instruction);
+            currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+            nextInstr = currentInst + 1;
+            break;
+        case 0x00E8:
+            ip = nextInstr->const_i32 - sizeof(Instruction);
+            currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+            nextInstr = currentInst + 1;
+            break;
+        case 0x00E9:
+            if (REG32(ctx, REG_PF) & TGX_PF_Flag_ZeroBit) {
+                ip = REG32(ctx, nextInstr->params[0]) - sizeof(Instruction);
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+                break;
+            }
+            ip = nextInstr->const_i32;
+            if (nextInstr->params[1] & TGX_JMP_USE_REG_FLAG) {
+                ip = REG32(ctx, ip);
+            }
+            ip -= sizeof(Instruction);
+            currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+            nextInstr = currentInst + 1;
+            break;
+        case 0x00EA:
+            if (REG32(ctx, REG_PF) & TGX_PF_Flag_ZeroBit) {
+                ip = nextInstr->const_i32 - sizeof(Instruction);
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+                break;
+            }
+            break;
+        case 0x00EB:
+            if (!(REG32(ctx, REG_PF) & TGX_PF_Flag_ZeroBit)) {
+                ip = REG32(ctx, nextInstr->params[0]) - sizeof(Instruction);
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+                break;
+            }
+            ip = nextInstr->const_i32;
+            if (nextInstr->params[1] & TGX_JMP_USE_REG_FLAG) {
+                ip = REG32(ctx, ip);
+            }
+            ip -= sizeof(Instruction);
+            currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+            nextInstr = currentInst + 1;
+            break;
+        case 0x00EC:
+            if (!(REG32(ctx, REG_PF) & TGX_PF_Flag_ZeroBit)) {
+                ip = nextInstr->const_i32 - sizeof(Instruction);
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+            }
+            break;
+        case 0x00ED:
+            if (REG32(ctx, REG_PF) & TGX_PF_Flag_ZeroBit) {
+                ip = REG32(ctx, nextInstr->params[0]) - sizeof(Instruction);
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+            }
+            break;
+        case 0x00EE:
+            if (!(REG32(ctx, REG_PF) & TGX_PF_Flag_ZeroBit)) {
+                ip = REG32(ctx, nextInstr->params[0]) - sizeof(Instruction);
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+            }
+            break;
+        case 0x00EF:
+            if (!(REG32(ctx, REG_PF) & (TGX_PF_Flag_NegBit | TGX_PF_Flag_ZeroBit))) {
+                ip = REG32(ctx, nextInstr->params[0]) - sizeof(Instruction);
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+            }
+            else if (nextInstr->params[1] & TGX_JMP_ELSE_FLAG) {
+                ip = nextInstr->const_i32;
+                if (nextInstr->params[1] & TGX_JMP_USE_REG_FLAG) {
+                    ip = REG32(ctx, ip);
+                }
+                ip -= sizeof(Instruction);
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+            }
+            break;
+        case 0x00F0:
+
+            break;
+        case 0x00F1:
+
+            break;
+        case 0x00F2:
+
+            break;
+        case 0x00F3:
+
+            break;
+        case 0x00F4:
+
+            break;
+        case 0x00F5:
+
+            break;
+        case 0x00F6:
+
+            break;
+        case 0x010B:
+            ip = REG32(ctx, REG_JR) - sizeof(Instruction);
+            currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+            nextInstr = currentInst + 1;
+            break;
+        default: break;
+    }
+
+    PrintInst(nextInstr);
+
+    s_TmpBreak = ip;
+    currentInst->opcode = 0x0116; // TODO: Account for jumps and ret
+}
+static void PrintReg(TGXContext* ctx, const char* buffer) {
+    int reg = ParseReg(&buffer);
+    if (reg == UNDEF) {
+        printf("Unknown register\n");
+    }
+
+    int is_float;
+    uint64_t val = (uint32_t)GetReg(ctx, reg, &is_float);
+
+    if (is_float) {
+        printf("%f\n", *(float*)&val);
+    }
+    else {
+        printf("%016lX (%ld)\n", val, val);
+    }
+}
+static void SetReg(TGXContext* ctx, const char* buffer){
+    int reg = ParseReg(&buffer);
+    if (reg == UNDEF) {
+        printf("Unknown register.\n");
+        return;
+    }
+    buffer += 2;
+    double value = ParseVal(&buffer);
+
+    if (isnan(value)) {
+        printf("Error parsing value.\n");
+        return;
+    }
+
+    switch (reg) {
+        default:
+            return;
+        case RA:
+            REG32(ctx, REG_RA) = (uint32_t)value; break;
+        case RB:
+            REG32(ctx, REG_RB) = (uint32_t)value; break;
+        case RC:
+            REG32(ctx, REG_RC) = (uint32_t)value; break;
+        case RD:
+            REG32(ctx, REG_RD) = (uint32_t)value; break;
+        case RE:
+            REG32(ctx, REG_RE) = (uint32_t)value; break;
+        case RF:
+            REG32(ctx, REG_RF) = (uint32_t)value; break;
+        case RX:
+            REG32(ctx, REG_RX) = (uint32_t)value; break;
+        case RY:
+            REG32(ctx, REG_RY) = (uint32_t)value; break;
+        case RZ:
+            REG32(ctx, REG_RZ) = (uint32_t)value; break;
+        case RW:
+            REG32(ctx, REG_RW) = (uint32_t)value; break;
+        case RI:
+            REG32(ctx, REG_RI) = (uint32_t)value; break;
+        case RJ:
+            REG32(ctx, REG_RJ) = (uint32_t)value; break;
+        case RK:
+            REG32(ctx, REG_RK) = (uint32_t)value; break;
+        case RL:
+            REG32(ctx, REG_RL) = (uint32_t)value; break;
+        case IP:
+            REG32(ctx, REG_IP) = (uint32_t)value; break;
+        case JR:
+            REG32(ctx, REG_JR) = (uint32_t)value; break;
+        case SB:
+            REG32(ctx, REG_SB) = (uint32_t)value; break;
+        case SH:
+            REG32(ctx, REG_SH) = (uint32_t)value; break;
+        case SP:
+            REG32(ctx, REG_SP) = (uint32_t)value; break;
+        case PF:
+            REG32(ctx, REG_PF) = (uint32_t)value; break;
+        case M0:
+            REG64(ctx, 0) = value; break;
+        case M1:
+            REG64(ctx, 1) = value; break;
+        case X0:
+            REGF32(ctx, REG_FX0) = (float)value; break;
+        case Y0:
+            REGF32(ctx, REG_FY0) = (float)value; break;
+        case Z0:
+            REGF32(ctx, REG_FZ0) = (float)value; break;
+        case W0:
+            REGF32(ctx, REG_FW0) = (float)value; break;
+        case X1:
+            REGF32(ctx, REG_FX1) = (float)value; break;
+        case Y1:
+            REGF32(ctx, REG_FY1) = (float)value; break;
+        case Z1:
+            REGF32(ctx, REG_FZ1) = (float)value; break;
+        case W1:
+            REGF32(ctx, REG_FW1) = (float)value; break;
+        case X2:
+            REGF32(ctx, REG_FX2) = (float)value; break;
+        case Y2:
+            REGF32(ctx, REG_FY2) = (float)value; break;
+        case Z2:
+            REGF32(ctx, REG_FZ2) = (float)value; break;
+        case W2:
+            REGF32(ctx, REG_FW2) = (float)value; break;
+        case X3:
+            REGF32(ctx, REG_FX3) = (float)value; break;
+        case Y3:
+            REGF32(ctx, REG_FY3) = (float)value; break;
+        case Z3:
+            REGF32(ctx, REG_FZ3) = (float)value; break;
+        case W3:
+            REGF32(ctx, REG_FW3) = (float)value; break;
+    }
+}
+static void Next(TGXContext* ctx, Instruction* currentInst) {
+    ++currentInst;
+    if (!s_IsTmp) {
+        ++currentInst;
+    }
+
+    PrintInst(currentInst);
+}
+static void Last(TGXContext* ctx, Instruction* currentInst) {
+    --currentInst;
+    if (!s_IsTmp) {
+        --currentInst;
+    }
+
+    PrintInst(currentInst);
+}
+static void Peek(TGXContext* ctx, const char* buffer) {
+    int reg = ParseReg(&buffer);
+
+    uint32_t addr = 0;
+    if (reg != UNDEF) {
+        buffer += 2;
+
+        int is_float;
+        addr = (uint32_t)GetReg(ctx, reg, &is_float);
+
+        if (is_float) {
+            printf("Cannot use a float point register for addresses.\n");
+            return;
+        }
+    }
+    else {
+        double d = ParseVal(&buffer);
+        if (isnan(d)) {
+            printf("Could not parse an address\n");
+            return;
+        }
+
+        addr = (uint32_t)d;
+    }
+
+    uint64_t word = *(uint64_t*)(ctx->Memory.memory_begin + addr);
+    printf("%08X: %016lX (%f)\n", addr, word, *(float*)&word);
+}
+static void Head(TGXContext* ctx) {
+    uint64_t word = MEMACCESS(uint64_t, ctx, REG32(ctx, REG_SP));
+    printf("%08X: %016lX (%f)\n", REG32(ctx, REG_SP), word, *(float*)&word);
+}
+
+static int LaunchDebugShell(TGXContext* ctx) {
+    static bool initialized = false;
+
+    if (!initialized) {
+        DebugShellInit();
+        initialized = true;
+    }
+
+    char buffer[256];
+    int _continue = true;
+
+    if (s_TmpBreak != 0) {
+        s_IsTmp = (s_TmpBreak == REG32(ctx, REG_IP));
+
+        (*((Instruction*)(ctx->Memory.memory_begin + s_TmpBreak))).opcode = 0x0000;
+        s_TmpBreak = 0;
+    }
+    else {
+        s_IsTmp = false;
+    }
+
+    do {
+        uint32_t line, code;
+        Instruction* current = ((Instruction*)(ctx->Memory.memory_begin + REG32(ctx, REG_IP)));
+        line = current->const_i32;
+        code = current->param16;
+
+        printf("Line %06u|Group %04X> ", line, code);
+        fgets(buffer, sizeof(buffer), stdin);
+        buffer[strcspn(buffer, "\n")] = '\0';
+
+        char* str = buffer;
+        int cmd = ParseCommand((const char**)&str);
+        switch (cmd) {
+            default:
+            case Cmd_Unknown:
+                printf("Unknown command\n");
+                break;
+            case Cmd_Help:
+                ShellHelp();
+                break;
+            case Cmd_Quit:
+                _continue = false;
+                break;
+            case Cmd_Kill:
+                (*(Instruction*)(ctx->Memory.memory_begin + (REG32(ctx, REG_IP) + sizeof(Instruction)))).opcode = 0x010C;
+                _continue = false;
+                break;
+            case Cmd_Step:
+                StepNext(ctx, current);
+                _continue = false;
+                break;
+            case Cmd_PrintReg:
+                PrintReg(ctx, str);
+                break;
+            case Cmd_SetReg:
+                SetReg(ctx, str);
+                break;
+            case Cmd_PrintNextInst:
+                Next(ctx, current);
+                break;
+            case Cmd_PrintLastInst:
+                Last(ctx, current);
+                break;
+            case Cmd_PeekMem:
+                Peek(ctx, str);
+                break;
+            case Cmd_PeekStack:
+                Head(ctx);
+                break;
+        }
+    }
+    while (_continue);
+
+    return 0;
+}
+
+static const char* GetInstStr(uint16_t instr) {
+
+    switch (instr) {
+        case 0x0000: return "nop";
+        case 0x0001:
+        case 0x0002:
+        case 0x0003:
+        case 0x0004:
+        case 0x0005:
+        case 0x0006:
+        case 0x0007:
+        case 0x0008:
+        case 0x0009:
+        case 0x000A:
+        case 0x000B:
+        case 0x000C:
+        case 0x000D:
+        case 0x000E:
+        case 0x000F:
+        case 0x0010:
+        case 0x0011:
+        case 0x0012:
+        case 0x0013:
+        case 0x0014:
+        case 0x0015:
+        case 0x0016:
+        case 0x0018:
+        case 0x001A:
+        case 0x001B:
+        case 0x001C:
+        case 0x001D:
+        case 0x001E:
+        case 0x001F:
+        case 0x0020:
+        case 0x0021:
+        case 0x0022:
+        case 0x0023:
+        case 0x0024:
+            return "mov";
+        case 0x0017:
+        case 0x0019:
+            return "movc";
+        case 0x0025:
+            return "movia";
+        case 0x0026:
+            return "movda";
+        case 0x0027:
+        case 0x0028:
+        case 0x0029:
+        case 0x002A:
+        case 0x002B:
+            return "swap";
+        case 0x002C: return "mcpy";
+        case 0x002D: return "mcmp";
+        case 0x002E:
+        case 0x002F:
+        case 0x0030:
+        case 0x0031:
+            return "mclr";
+        case 0x0032:
+        case 0x0033:
+        case 0x0034:
+        case 0x0035:
+        case 0x0036:
+        case 0x0037:
+        case 0x0038:
+        case 0x0039:
+        case 0x003A:
+        case 0x003B:
+        case 0x0041:
+            return "push";
+        case 0x003C:
+        case 0x003D:
+        case 0x003E:
+        case 0x003F:
+        case 0x0040:
+        case 0x0042:
+            return "pop";
+        case 0x0043: return "tsto";
+        case 0x0044: return "tld";
+        case 0x0045:
+        case 0x0046:
+        case 0x0047:
+        case 0x0048:
+        case 0x0049:
+        case 0x004A:
+        case 0x004B:
+        case 0x004C:
+        case 0x00B6:
+        case 0x00B7:
+            return "add";
+        case 0x004D:
+        case 0x004E:
+        case 0x004F:
+        case 0x0050:
+        case 0x0051:
+        case 0x0052:
+        case 0x0053:
+        case 0x0054:
+        case 0x00B8:
+        case 0x00B9:
+            return "sub";
+        case 0x0055:
+        case 0x0056:
+        case 0x0057:
+        case 0x0058:
+        case 0x0059:
+        case 0x005A:
+        case 0x005B:
+        case 0x005C:
+        case 0x00BA:
+        case 0x00BB:
+            return "mul";
+        case 0x005D:
+        case 0x005E:
+        case 0x005F:
+        case 0x0060:
+        case 0x0061:
+        case 0x0062:
+        case 0x0063:
+        case 0x0064:
+        case 0x00BC:
+        case 0x00BD:
+            return "div";
+        case 0x0065:
+        case 0x0066:
+        case 0x0067:
+        case 0x0068:
+        case 0x0069:
+        case 0x006A:
+        case 0x006B:
+        case 0x006C:
+        case 0x00BE:
+        case 0x00BF:
+            return "mod";
+        case 0x006D:
+        case 0x006E:
+        case 0x006F:
+        case 0x0070:
+        case 0x00DD:
+            return "neg";
+        case 0x0071:
+        case 0x0072:
+        case 0x0073:
+        case 0x0074:
+            return "inc";
+        case 0x0075:
+        case 0x0076:
+        case 0x0077:
+        case 0x0078:
+            return "dec";
+        case 0x0079:
+        case 0x007A:
+        case 0x007B:
+        case 0x007C:
+        case 0x007D:
+        case 0x007E:
+        case 0x007F:
+        case 0x0080:
+            return "rbr";
+        case 0x0081:
+        case 0x0082:
+        case 0x0083:
+        case 0x0084:
+        case 0x0085:
+        case 0x0086:
+        case 0x0087:
+        case 0x0088:
+            return "rbl";
+        case 0x0089:
+        case 0x008A:
+        case 0x008B:
+        case 0x008C:
+        case 0x008D:
+        case 0x008E:
+        case 0x008F:
+        case 0x0090:
+        case 0x00C4:
+        case 0x00C5:
+            return "cmp";
+        case 0x0091:
+        case 0x0092:
+        case 0x0093:
+        case 0x0094:
+            return "land";
+        case 0x0095:
+        case 0x0096:
+        case 0x0097:
+        case 0x0098:
+            return "lor";
+        case 0x0099:
+        case 0x009A:
+        case 0x009B:
+        case 0x009C:
+            return "lnot";
+        case 0x009D:
+        case 0x009E:
+        case 0x009F:
+        case 0x00A0:
+            return "and";
+        case 0x00A2:
+        case 0x00A3:
+        case 0x00A4:
+        case 0x00A5:
+            return "xor";
+        case 0x00A6:
+        case 0x00A7:
+        case 0x00A8:
+        case 0x00A9:
+            return "or";
+        case 0x00AA:
+        case 0x00AB:
+        case 0x00AC:
+        case 0x00AD:
+            return "not";
+        case 0x00AE:
+        case 0x00AF:
+            return "cmxb";
+        case 0x00B0:
+        case 0x00B1:
+            return "sqr";
+        case 0x00B2:
+        case 0x00B3:
+        case 0x00B4:
+        case 0x00B5:
+        case 0x00E6:
+            return "abs";
+        case 0x00C0: return "floor";
+        case 0x00C1: return "ceil";
+        case 0x00C2: return "floor";
+        case 0x00C3: return "sqrt";
+        case 0x00C6: return "vnorm";
+        case 0x00C7: return "vadd";
+        case 0x00C8: return "vsub";
+        case 0x00C9: return "vmul";
+        case 0x00CA: return "vdiv";
+        case 0x00CB: return "vdot";
+        case 0x00CC: return "vlen";
+        case 0x00CD:
+        case 0x00CE:
+            return "cos";
+        case 0x00CF:
+        case 0x00D0:
+            return "sin";
+        case 0x00D1:
+        case 0x00D2:
+            return "tan";
+        case 0x00D3:
+        case 0x00D4:
+            return "acos";
+        case 0x00D5:
+        case 0x00D6:
+            return "asin";
+        case 0x00D7:
+        case 0x00D8:
+        case 0x00D9:
+            return "atan";
+        case 0x00DA: return "bcosmxd";
+        case 0x00DB: return "bsinmxd";
+        case 0x00DC: return "btanmxd";
+        case 0x00DE: return "vswz";
+        case 0x00DF: return "pow";
+        case 0x00E0: return "log";
+        case 0x00E1: return "ln";
+        case 0x00E2: return "epow";
+        case 0x00E3: return "ldpi";
+        case 0x00E4: return "lde";
+        case 0x00E5: return "inv";
+        case 0x00E7:
+        case 0x00E8:
+            return "jmp";
+        case 0x00E9:
+        case 0x00EA:
+        case 0x00ED:
+            return "jz";
+        case 0x00EB:
+        case 0x00EC:
+        case 0x00EE:
+            return "jnz";
+        case 0x00EF:
+        case 0x00F0:
+            return "jgt";
+        case 0x00F1:
+        case 0x00F2:
+            return "jlt";
+        case 0x00F3:
+        case 0x00F4:
+            return "jge";
+        case 0x00F5:
+        case 0x00F6:
+            return "jle";
+        case 0x010B: return "ret";
+        case 0x010C: return "hlt";
+        case 0x010D:
+        case 0x010E:
+            return "int";
+        case 0x0115: return "syscall";
+        case 0x0116: return "break";
+        default: return NULL;
+    }
+
+}

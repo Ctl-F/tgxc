@@ -380,6 +380,34 @@ syscall const32
     and a definition file should be provided by the vm.
 
 
+break [code]
+    Adds a breakpoint operation to the assembly. The code is optional but can be used
+    to specify the type/region of breakpoint that is hit, since a breakpoint instruction
+    has limited space for debug info, the breakpoint operation will store the line number
+    and this code (16 bit). You will not be able to recover the original filename so use
+    these codes to figure out which file/region you're in, and then you'll be able to use
+    the line number of the original file to better locate yourself.
+
+    Note that for this to actually emit a breakpoint, you must assemble in debug mode.
+    Debug mode will do 2 things:
+        1: emit breakpoints (if not in debug mode then breakpoints will be omitted)
+        2: pad instructions with nops. This will expand the output file size and introduce
+            some slowdown in the execution of your program. The reason for this is to allow
+            stepping over the lines of code. When we step to the next line, the following
+            nop will be replaced with a temporary breakpoint so that execution can be properly
+            stopped for debugging. For this reason, nop instructions will also include line
+            and user tag information. (in debug mode).
+
+    debug mode is enabled by assembling with -d in the assembler arguments
+Future Additions: Conditional breakpoints
+breakz  [code]
+breaknz [code]
+breakgt [code]
+breakge [code]
+breaklt [code]
+breakle [code]
+
+these will break on the PROGRAM FLAGS register, the code has NOTHING TO DO with the break condition.
 
 Data Section:
 types:

@@ -414,3 +414,5 @@ int R8 > 0x010D
 int Imm > 0x010E
 
 syscall Imm > 0x0115
+break > 0x0116, EncodeBreak
+break Imm > 0x0116, EncodeBreak

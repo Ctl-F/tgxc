@@ -23,7 +23,7 @@ struct string_view {
 enum class Command {
     Undefined,
     Abs, Acos, Add, And, Asin, Atan, Atan2,
-    Bcosmxd, Bsinmxd, Btanmxd,
+    Bcosmxd, Bsinmxd, Btanmxd, Break,
     Ceil, Cmp, Cmxb, Cos,
     Dec, Div,
     Epow,
@@ -87,105 +87,6 @@ struct CompilerContext {
     std::vector<uint32_t> instructions_to_relink;
     CodeSection section = CodeSection::Meta;
 };
-
-/*
-typedef bool(*EmitFunc)(CompilerContext&, Instruction&);
-
-bool TriggerUndefined(CompilerContext& ctx, Instruction&);
-bool EmitAbs(CompilerContext& ctx, Instruction&);
-bool EmitAcos(CompilerContext& ctx, Instruction&);
-bool EmitAdd(CompilerContext& ctx, Instruction&);
-bool EmitAnd(CompilerContext& ctx, Instruction&);
-bool EmitAsin(CompilerContext& ctx, Instruction&);
-bool EmitAtan(CompilerContext& ctx, Instruction&);
-bool EmitAtan2(CompilerContext& ctx, Instruction&);
-bool EmitBcosmxd(CompilerContext& ctx, Instruction&);
-bool EmitBsinmxd(CompilerContext& ctx, Instruction&);
-bool EmitBtanmxd(CompilerContext& ctx, Instruction&);
-bool EmitCeil(CompilerContext& ctx, Instruction&);
-bool EmitCmp(CompilerContext& ctx, Instruction&);
-bool EmitCmxb(CompilerContext& ctx, Instruction&);
-bool EmitCos(CompilerContext& ctx, Instruction&);
-bool EmitDec(CompilerContext& ctx, Instruction&);
-bool EmitDiv(CompilerContext& ctx, Instruction&);
-bool EmitEpow(CompilerContext& ctx, Instruction&);
-bool EmitFloor(CompilerContext& ctx, Instruction&);
-bool EmitHlt(CompilerContext& ctx, Instruction&);
-bool EmitInt(CompilerContext& ctx, Instruction&);
-bool EmitInc(CompilerContext& ctx, Instruction&);
-bool EmitInv(CompilerContext& ctx, Instruction&);
-bool EmitJmp(CompilerContext& ctx, Instruction&);
-bool EmitJz(CompilerContext& cxt, Instruction&);
-bool EmitJnz(CompilerContext& ctx, Instruction&);
-bool EmitJgt(CompilerContext& ctx, Instruction&);
-bool EmitJge(CompilerContext& ctx, Instruction&);
-bool EmitJlt(CompilerContext& ctx, Instruction&);
-bool EmitJle(CompilerContext& ctx, Instruction&);
-bool EmitLand(CompilerContext& ctx, Instruction&);
-bool EmitLor(CompilerContext& ctx, Instruction&);
-bool EmitLnot(CompilerContext& ctx, Instruction&);
-bool EmitLde(CompilerContext& ctx, Instruction&);
-bool EmitLog10(CompilerContext& ctx, Instruction&);
-bool EmitLoge(CompilerContext& ctx, Instruction&);
-bool EmitLdpi(CompilerContext& ctx, Instruction&);
-bool EmitLdmsk(CompilerContext& ctx, Instruction&);
-bool EmitMov(CompilerContext& ctx, Instruction&);
-bool EmitMovia(CompilerContext& ctx, Instruction&);
-bool EmitMovda(CompilerContext& ctx, Instruction&);
-bool EmitMovc(CompilerContext& ctx, Instruction&);
-bool EmitMovr(CompilerContext& ctx, Instruction&);
-bool EmitMcpy(CompilerContext& ctx, Instruction&);
-bool EmitMcmp(CompilerContext& ctx, Instruction&);
-bool EmitMclr(CompilerContext& ctx, Instruction&);
-bool EmitMul(CompilerContext& ctx, Instruction&);
-bool EmitMod(CompilerContext& ctx, Instruction&);
-bool EmitNop(CompilerContext& ctx, Instruction&);
-bool EmitNeg(CompilerContext& ctx, Instruction&);
-bool EmitNot(CompilerContext& ctx, Instruction&);
-bool EmitOr(CompilerContext& ctx, Instruction&);
-bool EmitPush(CompilerContext& ctx, Instruction&);
-bool EmitPop(CompilerContext& ctx, Instruction&);
-bool EmitPow(CompilerContext& ctx, Instruction&);
-bool EmitRbr(CompilerContext& ctx, Instruction&);
-bool EmitRbl(CompilerContext& ctx, Instruction&);
-bool EmitRet(CompilerContext& ctx, Instruction&);
-bool EmitSwap(CompilerContext& ctx, Instruction&);
-bool EmitSub(CompilerContext& ctx, Instruction&);
-bool EmitSqr(CompilerContext& ctx, Instruction&);
-bool EmitSqrt(CompilerContext& ctx, Instruction&);
-bool EmitSin(CompilerContext& ctx, Instruction&);
-bool EmitSyscall(CompilerContext& ctx, Instruction&);
-bool EmitTsto(CompilerContext& ctx, Instruction&);
-bool EmitTld(CompilerContext& ctx, Instruction&);
-bool EmitTan(CompilerContext& ctx, Instruction&);
-bool EmitVnorm(CompilerContext& ctx, Instruction&);
-bool EmitVadd(CompilerContext& ctx, Instruction&);
-bool EmitVsub(CompilerContext& ctx, Instruction&);
-bool EmitVmul(CompilerContext& ctx, Instruction&);
-bool EmitVdiv(CompilerContext& ctx, Instruction&);
-bool EmitVdot(CompilerContext& ctx, Instruction&);
-bool EmitVlen(CompilerContext& ctx, Instruction&);
-bool EmitVswz(CompilerContext& ctx, Instruction&);
-bool EmitXor(CompilerContext& ctx, Instruction&);
-
-static EmitFunc s_InstructionFuncs[] {
-    TriggerUndefined, EmitAbs, EmitAcos, EmitAdd, EmitAnd, EmitAsin, EmitAtan, EmitAtan2,
-    EmitBcosmxd, EmitBsinmxd, EmitBtanmxd,
-    EmitCeil, EmitCmp, EmitCmxb, EmitCos,
-    EmitDec, EmitDiv,
-    EmitEpow, EmitFloor, EmitHlt,
-    EmitInt, EmitInc, EmitInv,
-    EmitJmp, EmitJz, EmitJnz, EmitJgt, EmitJge, EmitJlt, EmitJle,
-    EmitLand, EmitLor, EmitLnot, EmitLde, EmitLog10, EmitLoge, EmitLdpi, EmitLdmsk,
-    EmitMov, EmitMovia, EmitMovda, EmitMovc, EmitMovr, EmitMcpy, EmitMcmp, EmitMclr, EmitMul, EmitMod,
-    EmitNop, EmitNeg, EmitNot,
-    EmitOr, EmitPush, EmitPop, EmitPow,
-    EmitRbr, EmitRbl, EmitRet,
-    EmitSwap, EmitSub, EmitSqr, EmitSqrt, EmitSin, EmitSyscall,
-    EmitTsto, EmitTld, EmitTan,
-    EmitVnorm, EmitVadd, EmitVsub, EmitVmul, EmitVdiv, EmitVdot, EmitVlen, EmitVswz,
-    EmitXor,
-};*/
 
 static RegisterInfo s_RegisterTable[static_cast<size_t>(RegisterID::REGCOUNT)] {
     { .id = RegisterID::RA, .type = Type::Integer, .width = 4, .generalPurpose = true, .sysAuto = false, .emitID =  0 },
@@ -268,7 +169,7 @@ static RegisterInfo s_RegisterTable[static_cast<size_t>(RegisterID::REGCOUNT)] {
 
 static std::unordered_map<char, std::vector<std::string>> s_Commands = {
     {'a', { "abs", "acos", "and", "asin", "atan2", "atan", "add" }},
-    {'b', { "bcosmxd", "bsinmxd", "btanmxd", }},
+    {'b', { "bcosmxd", "bsinmxd", "btanmxd", "break", }},
     {'c', { "ceil", "cmp", "cmxb", "cos", }},
     {'d', { "dec", "div", }},
     {'e', { "epow", }},
@@ -290,7 +191,7 @@ static std::unordered_map<char, std::vector<std::string>> s_Commands = {
 static std::unordered_map<std::string, Command> s_CommandIDs = {
     {"abs", Command::Abs},         {"acos", Command::Acos},       {"and", Command::And},
     {"asin", Command::Asin},       {"atan2", Command::Atan2},     {"atan", Command::Atan},
-    {"add", Command::Add},         {"bcosmxd", Command::Bcosmxd}, {"bsinmxd", Command::Bsinmxd},
+    {"add", Command::Add},         {"bcosmxd", Command::Bcosmxd}, {"bsinmxd", Command::Bsinmxd}, { "break", Command::Break },
     {"btanmxd", Command::Btanmxd}, {"ceil", Command::Ceil},       {"cmp", Command::Cmp},
     {"cmxb", Command::Cmxb},       {"cos", Command::Cos},         {"dec", Command::Dec},
     {"div", Command::Div},         {"epow", Command::Epow},       {"floor", Command::Floor},
@@ -318,7 +219,7 @@ static std::unordered_map<std::string, Command> s_CommandIDs = {
 static std::unordered_map<Command, std::string> s_CommandNames = {
     {Command::Abs, "abs"},         {Command::Acos, "acos"},       {Command::And, "and"},
     {Command::Asin, "asin"},       {Command::Atan2, "atan2"},     {Command::Atan, "atan"},
-    {Command::Add, "add"},         {Command::Bcosmxd, "bcosmxd"}, {Command::Bsinmxd, "bsinmxd"},
+    {Command::Add, "add"},         {Command::Bcosmxd, "bcosmxd"}, {Command::Bsinmxd, "bsinmxd"}, { Command::Break, "break" },
     {Command::Btanmxd, "btanmxd"}, {Command::Ceil, "ceil"},       {Command::Cmp, "cmp"},
     {Command::Cmxb, "cmxb"},       {Command::Cos, "cos"},         {Command::Dec, "dec"},
     {Command::Div, "div"},         {Command::Epow, "epow"},       {Command::Floor, "floor"},
@@ -386,6 +287,7 @@ NumberLiteral get_number_literal(string_view str);
 
 static uint64_t s_Line{0};
 static string_view s_CurrentFile{ nullptr, nullptr };
+static bool s_DebugMode{false};
 
 std::string get_error_location() {
     return std::string{s_CurrentFile.begin, s_CurrentFile.end} + " " + std::to_string(s_Line) + ": ";
@@ -856,6 +758,12 @@ uint32_t parse_param_ids(CompilerContext& ctx, Instruction& instr, std::vector<s
 bool read_and_emit_instruction(CompilerContext& ctx) {
     consume_ignore_whitespace_and_comments(ctx);
 
+    if (s_DebugMode) {
+        Instruction& debugPad = ctx.program_section.emplace_back();
+        debugPad.opcode = 0x0000;
+        debugPad.const_i32 = static_cast<uint32_t>(s_Line);
+    }
+
     Command cmd = get_command(ctx.input);
     if (cmd == Command::Undefined) {
         throw std::runtime_error("Undefined command");
@@ -882,6 +790,11 @@ bool read_and_emit_instruction(CompilerContext& ctx) {
         if (where->second.handler != nullptr) {
             where->second.handler(i, param_id, params);
         }
+
+        if (!s_DebugMode && cmd == Command::Break) {
+
+        }
+
         return true;
     }
     InvalidOperandParams(i, param_id, params);
@@ -1315,6 +1228,9 @@ int main(int argc, char **argv) {
             else if(argv[i][1] == 'g'){
                 output_debug_labels = true;
             }
+            else if (argv[i][1] == 'd') {
+                s_DebugMode = true;
+            }
         }
     }
 
@@ -1473,240 +1389,7 @@ void HandleNoElseCode(Instruction& instr, uint32_t, std::vector<string_view>&){
     instr.ext_params[0] = instr.params[1];
     instr.params[1] = 0;
 }
-
-/*
-bool TriggerUndefined(CompilerContext& ctx, Instruction& inst){
-    throw std::runtime_error(std::string("Undefined instruction sitting around: ") + std::string{ctx.input, ctx.input+3});
+void EncodeBreak(Instruction& instr, uint32_t, std::vector<string_view>&) {
+    instr.param16 = static_cast<uint16_t>(instr.const_i32);
+    instr.const_i32 = static_cast<uint32_t>(s_Line);
 }
-bool EmitAbs(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitAcos(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitAdd(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitAnd(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitAsin(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitAtan(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitAtan2(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitBcosmxd(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitBsinmxd(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitBtanmxd(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitCeil(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitCmp(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitCmxb(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitCos(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitDec(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitDiv(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitEpow(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitFloor(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitHlt(CompilerContext& ctx, Instruction& inst){
-    inst.opcode = 0x010C;
-    ctx.input += sizeof("hlt");
-    return true;
-}
-bool EmitInt(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitInc(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitInv(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitJmp(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitJz(CompilerContext& cxt, Instruction& inst){
-    return false;
-}
-bool EmitJnz(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitJgt(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitJge(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitJlt(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitJle(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitLand(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitLor(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitLnot(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitLde(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitLog10(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitLoge(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitLdpi(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitLdmsk(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitMov(CompilerContext& ctx, Instruction& inst){
-
-    //TODO: What is a good way to implement this???
-    // TODO: Perhaps use a naive pattern matching for this??
-
-    return false;
-}
-bool EmitMovia(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitMovda(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitMovc(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitMovr(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitMcpy(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitMcmp(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitMclr(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitMul(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitMod(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitNop(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitNeg(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitNot(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitOr(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitPush(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitPop(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitPow(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitRbr(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitRbl(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitRet(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitSwap(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitSub(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitSqr(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitSqrt(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitSin(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitSyscall(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitTsto(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitTld(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitTan(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitVnorm(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitVadd(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitVsub(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitVmul(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitVdiv(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitVdot(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitVlen(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitVswz(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-bool EmitXor(CompilerContext& ctx, Instruction& inst){
-    return false;
-}
-*/

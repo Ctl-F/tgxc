@@ -48,6 +48,7 @@ shell_start:
 
 
 shell_login:
+    break 0x0001;
     ; allocate return value
     sub sp, 4;
     ; rf holds the address of the return value
