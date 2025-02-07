@@ -149,6 +149,8 @@
 // UPDATE THIS IF ANY NEW INSTRUCTIONS ARE ADDED!!!!!
 #define TGX_OPCODE_COUNT 0x011F
 
+#define TGX_EXIT_CODE_NONE 0
+#define TGX_EXIT_CODE_RESTART 65535
 
 
 typedef struct {
@@ -215,6 +217,7 @@ typedef struct {
     GraphicsThread GU;
     PrincipleMemory Memory;
 	TGX_swi_handler SWIFunc;
+	int ExitCode;
 } TGXContext;
 
 typedef struct {

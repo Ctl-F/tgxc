@@ -47,6 +47,16 @@ void free_principle_memory(PrincipleMemory* mem){
 
 int init_program_thread(ProgramThread* pu) {
     // enable the pu
+    for (int i=0; i<REG32_COUNT; i++) {
+        pu->gp32[i].full = 0;
+    }
+    for (int i=0; i<REG64_COUNT; i++) {
+        pu->gp64[i].full = 0;
+    }
+    for (int i=0; i<REGF32_COUNT; i++) {
+        pu->f32[i] = 0;
+    }
+
     pu->gp32[REG_PF].full = TGX_PF_Flag_SysActiveBit;
 
     pu->gp32[REG_SH].full = ROM_SIZE + PROGRAM_CACHE_SIZE;
@@ -79,7 +89,7 @@ void destroy_graphics_thread(GraphicsThread* gu){
 
 #define TGX_DISPATCH(table, instr, sys) instr = *((Instruction*)((sys).Memory.memory_begin + (sys).PU.gp32[REG_IP].full)); goto *table[instr.opcode]
 
-#define TGX_PROFILE
+//#define TGX_PROFILE
 
 #ifdef TGX_PROFILE
 
@@ -134,7 +144,7 @@ static uint64_t ProfilerTimestamp_Start_, ProfilerTimestamp_End_;
 
 #define GEN_FLAG_IS_ZERO(reg) (((reg) == 0) << TGX_PF_Shift_ZeroBit)
 
-//TODO: Use memprotect to enfore ROM in allocated ROM section
+//TODO: Use memprotect to enforce ROM in allocated ROM section
 #define MEMPTR(type, sys, index) (type*)(sys->Memory.memory_begin + (index))
 #define MEMACCESS(type, sys, index) *MEMPTR(type, sys, index)
 //#define MEMACCESS(type, sys, index) *(type*)(sys->Memory.program_cache_begin + (index))
@@ -867,7 +877,9 @@ int program_thread_exec(TGXContext* sys){
     TGX_CASE(MEMCMP):
     TGX_PROFILE_CALL(MEMCMP, 0x002D);
 
-    REG32(sys, instruction.params[0]) = memcmp(MEMPTR(void, sys, instruction.params[1]), MEMPTR(void, sys, instruction.params[2]), (size_t)REG32(sys, instruction.ext_params[0]));
+    REG32(sys, instruction.params[0]) = memcmp(MEMPTR(void, sys, REG32(sys, instruction.params[1])),
+                                MEMPTR(void, sys, REG32(sys, instruction.ext_params[0])),
+                                (size_t)REG32(sys, instruction.ext_params[1]));
     UPDATE_PF_ZERO_NEG_BITS_I(sys, REG32(sys, instruction.params[0]), 32);
 
     TGX_PROFILE_END(MEMCMP, 0x002D);
@@ -3873,6 +3885,8 @@ enum COMMANDS {
     Cmd_Kill,
     Cmd_Step,
     Cmd_StepOvr,
+    Cmd_Break,
+    Cmd_Restart,
 };
 
 enum REGS {
@@ -3883,7 +3897,7 @@ enum REGS {
 static void DebugShellInit(void) {
     printf("TGX Serial Debug Shell V0.1\n");
     printf("type 'help' for list of commands\n");
-    printf("type 'quit' to resume execution.\n");
+    printf("type 'cont' to resume execution.\n");
     printf("--------------------------------\n");
 }
 
@@ -3899,10 +3913,14 @@ static void ShellHelp(void) {
     printf("head               Shows the contents at the top of the stack\n");
     printf("step               Steps forward by one instruction\n");
     printf("stepovr            Steps forward skipping over function calls\n");
+    printf("break [line]       Attempts to set a breakpoint for the line\n");
+    printf("restart            Restarts the machine\n");
 }
 
 static uint32_t s_TmpBreak = {0};
 static bool s_IsTmp = {0};
+static int s_FixedTmpCount = 0;
+static uint32_t s_FixedTmp[1024] = {0};
 
 static void SkipSpaces(const char** ptr) {
     while (**ptr && **ptr == ' ') (*ptr)++;
@@ -3925,6 +3943,9 @@ static int ParseCommand(const char** ptr) {
     if (strncmp(*ptr, "head", 4) == 0 && !isalnum((*ptr)[4])){ (*ptr)+=4; return Cmd_PeekStack; }
     if (strncmp(*ptr, "step", 4) == 0 && !isalnum((*ptr)[4])){ (*ptr)+=4; return Cmd_Step; }
     if (strncmp(*ptr, "stepovr", 7) == 0 && !isalnum((*ptr)[7])){ (*ptr)+=7; return Cmd_StepOvr; }
+    if (strncmp(*ptr, "break", 5) == 0 && !isalnum((*ptr)[5])){ (*ptr)+=5; return Cmd_Break; }
+    if (strncmp(*ptr, "restart", 7) == 0 && !isalnum((*ptr)[7])){ (*ptr)+=7; return Cmd_Restart; }
+
     return Cmd_Unknown;
 }
 static int ParseReg(const char** ptr) {
@@ -4111,6 +4132,14 @@ static double ParseVal(const char** ptr) {
     SkipSpaces(ptr);
 
     char *end;
+    const char *beg = *ptr;
+    if (beg[0] == '0' && (beg[1] == 'x' || beg[1] == 'X')) {
+        long value = strtol(beg, &end, 16);
+        if (end != *ptr) {
+            return (double)value;
+        }
+    }
+
     double value = strtod(*ptr, &end);
 
     if (end == *ptr) {
@@ -4120,27 +4149,201 @@ static double ParseVal(const char** ptr) {
     return value;
 }
 
-static const char* GetInstStr(uint16_t instr);
+#define INCLUDE_DATA_TABLE
+#include "optable.inc.c"
+
+#define PARAM_TYPE_MASK 0b1111
+#define PARAM_MASK_WIDTH 4
+#define PARAM_TYPE_None 0
+#define PARAM_TYPE_R32 1
+#define PARAM_TYPE_R16 2
+#define PARAM_TYPE_R8 3
+#define PARAM_TYPE_R64 4
+#define PARAM_TYPE_R64H 5
+#define PARAM_TYPE_R64L 6
+#define PARAM_TYPE_F32 7
+#define PARAM_TYPE_RVec 8
+#define PARAM_TYPE_Table 9
+#define PARAM_TYPE_DeR32 10
+#define PARAM_TYPE_Imm 11
+#define PARAM_TYPE_Size8 12
+#define PARAM_TYPE_Size16 13
+#define PARAM_TYPE_Size32 14
+#define PARAM_TYPE_Size64 15
+
+static const char* Reg32_Names[] = {
+    "ra", "rb", "rc", "rd", "re", "rf", "rw", "rx", "ry", "rz",
+    "ip", "jr", "sb", "sp", "sh", "pf", "ri", "rj", "rk", "rl"
+};
+static const char* Reg16_Names[] = {
+    "ral", "rah", "rbl", "rbh", "rcl", "rch", "rdl", "rdh",
+    "rel", "reh", "rfl", "rfh", "rwl", "rwh", "rxl", "rxh",
+    "ryl", "ryh", "rzl", "rzh"
+};
+static const char* Reg8_Names[] = {
+    "ras", "rbs", "rcs", "rds", "res", "rfs", "rws", "rxs", "rys", "rzs",
+};
+static const char* Reg64_Names[] = { "m0", "m1" };
+static const char* Reg64H_Names[] = { "m0h", "m1h" };
+static const char* Reg64L_Names[] = { "m0l", "m1l" };
+static const char* RegVec_Names[] = { "ve0", "ve1", "ve2", "ve3" };
+static const char* RegF32_Names[] = {
+    "fx0", "fy0", "fz0", "fw0",
+    "fx1", "fy1", "fz1", "fw1",
+    "fx2", "fy2", "fz2", "fw2",
+    "fx3", "fy3", "fz3", "fw3",
+};
+
+static void PrintParam(uint32_t type, Instruction* inst, int index) {
+    switch (type) {
+        default:
+        case PARAM_TYPE_None:
+            return;
+        case PARAM_TYPE_R32:
+            if (index < 2) {
+                printf("%s ", Reg32_Names[inst->params[index]]);
+            }
+            else {
+                printf("%s ", Reg32_Names[inst->ext_params[index - 2]]);
+            }
+            return;
+        case PARAM_TYPE_R16:
+            if (index < 2) {
+                printf("%s ", Reg16_Names[inst->params[index]]);
+            }
+            else {
+                printf("%s ", Reg16_Names[inst->ext_params[index - 2]]);
+            }
+            return;
+        case PARAM_TYPE_R8:
+            if (index < 2) {
+                printf("%s ", Reg8_Names[inst->params[index]]);
+            }
+            else {
+                printf("%s ", Reg8_Names[inst->ext_params[index - 2]]);
+            }
+        return;
+        case PARAM_TYPE_R64:
+            if (index < 2) {
+                printf("%s ", Reg64_Names[inst->params[index]]);
+            }
+            else {
+                printf("%s ", Reg64_Names[inst->ext_params[index - 2]]);
+            }
+        return;
+        case PARAM_TYPE_R64H:
+            if (index < 2) {
+                printf("%s ", Reg64H_Names[inst->params[index]]);
+            }
+            else {
+                printf("%s ", Reg64H_Names[inst->ext_params[index - 2]]);
+            }
+        return;
+        case PARAM_TYPE_R64L:
+            if (index < 2) {
+                printf("%s ", Reg64L_Names[inst->params[index]]);
+            }
+            else {
+                printf("%s ", Reg64L_Names[inst->ext_params[index - 2]]);
+            }
+        return;
+        case PARAM_TYPE_F32:
+            if (index < 2) {
+                printf("%s ", RegF32_Names[inst->params[index]]);
+            }
+            else {
+                printf("%s ", RegF32_Names[inst->ext_params[index - 2]]);
+            }
+        return;
+        case PARAM_TYPE_Table:
+            printf("tbl ");
+            return;
+        case PARAM_TYPE_RVec:
+            if (index < 2) {
+                printf("%s ", RegVec_Names[inst->params[index]]);
+            }
+            else {
+                printf("%s ", RegVec_Names[inst->ext_params[index - 2]]);
+            }
+        return;
+        case PARAM_TYPE_DeR32:
+            if (index < 2) {
+                printf("[%s] ", Reg32_Names[inst->params[index]]);
+            }
+            else {
+                printf("[%s] ", Reg32_Names[inst->ext_params[index - 2]]);
+            }
+        return;
+        case PARAM_TYPE_Imm:
+            printf("%d (0x%08X | %f)", inst->const_i32, inst->const_i32, inst->const_f32);
+            return;
+        case PARAM_TYPE_Size8:
+            printf("i8 ");
+            return;
+        case PARAM_TYPE_Size16:
+            printf("i16 ");
+            return;
+        case PARAM_TYPE_Size32:
+            printf("i32 ");
+            return;
+        case PARAM_TYPE_Size64:
+            printf("i64 ");
+            return;
+    }
+}
+
+static void PrintParamIDs(Mnemonic *spec, Instruction* inst) {
+    uint32_t params[8] = { 0, 0, 0, 0, 0, 0, 0, 0};
+    uint32_t *cursor = params+7;
+    uint32_t par = spec->param_id;
+    while ((par & PARAM_TYPE_MASK) != PARAM_TYPE_None) {
+        *cursor = par & PARAM_TYPE_MASK;
+        par >>= PARAM_MASK_WIDTH;
+        cursor--;
+        if (cursor < params) {
+            printf("Invalid ParamID! Too many parameters detected.\n");
+            return;
+        }
+    }
+    cursor++;
+
+    uint32_t *beg = params;
+    while (cursor < params+8) {
+        *beg = *cursor;
+        beg++; cursor++;
+    }
+    while (beg < cursor) {
+        *beg = 0; beg++;
+    }
+
+    beg = params;
+    int index = 0;
+    while (*beg) {
+        PrintParam(*beg, inst, index);
+        index++;
+        beg++;
+    }
+    printf("\n");
+}
 
 static void PrintInst(Instruction* inst) {
     if ((inst-1)->opcode == 0x0000) {
         printf("%4u: ", (inst-1)->const_i32);
     }
 
+    Mnemonic *op = SearchOpCode(inst->opcode);
     uint32_t opcode = inst->opcode;
-    uint32_t param0 = inst->params[0];
-    uint32_t param1 = inst->params[1];
 
-    const char* inst_str = GetInstStr((uint16_t)opcode);
-
-    if (inst_str == NULL) {
-        inst_str = "???";
+    if (op == NULL) {
+        uint32_t param0 = inst->params[0];
+        uint32_t param1 = inst->params[1];
+        printf("[%04X] ??? %02X %02X %08X (%f)\n", opcode, param0, param1, inst->const_i32, inst->const_f32);
+        return;
     }
 
-    printf("%s[%04X] %02X %02X %08X (%f)\n", inst_str, opcode, param0, param1, inst->const_i32, inst->const_f32);
+    printf("[%04X] %s ", opcode, op->name);
+    PrintParamIDs(op, inst);
 }
-//TODO: Peek as hex bytes (it's more useful)
-//TODO: Dissasembler table and better dissassembled output.
 
 static void StepNext(TGXContext* ctx, Instruction* currentInst, int step_into) {
     uint32_t ip = REG32(ctx, REG_IP);
@@ -4367,7 +4570,19 @@ static void PrintReg(TGXContext* ctx, const char* buffer) {
         printf("%f\n", *(float*)&val);
     }
     else {
-        printf("%016lX (%ld)\n", val, val);
+        printf("%016lX (%ld)", val, val);
+
+        if (reg == PF) {
+            printf("   Z%u | N%u | A%u | G%u | E%u Code %02X",
+                (REG32(ctx, REG_PF) & TGX_PF_Flag_ZeroBit) >> TGX_PF_Shift_ZeroBit,
+                (REG32(ctx, REG_PF) & TGX_PF_Flag_NegBit) >> TGX_PF_Shift_NegBit,
+                (REG32(ctx, REG_PF) & TGX_PF_Flag_SysActiveBit) >> TGX_PF_Shift_SysActiveBit,
+                (REG32(ctx, REG_PF) & TGX_PF_Flag_GraphicsFree) >> TGX_PF_Shift_GraphicsFree,
+                (REG32(ctx, REG_PF) & TGX_PF_Flag_ErrorBit) >> TGX_PF_Shift_ErrorBit,
+                (REG32(ctx, REG_PF) & TGX_PF_Flag_ErrorMask));
+        }
+
+        printf("\n");
     }
 }
 static void SetReg(TGXContext* ctx, const char* buffer){
@@ -4506,13 +4721,96 @@ static void Peek(TGXContext* ctx, const char* buffer) {
         addr = (uint32_t)d;
     }
 
-    uint64_t word = *(uint64_t*)(ctx->Memory.memory_begin + addr);
-    printf("%08X: %016lX (%f)\n", addr, word, *(float*)&word);
+#define DISP_LINES 2
+#define DISP_WIDTH 16
+    uint8_t *cursor = ctx->Memory.memory_begin + addr;
+    printf("%08X: ", addr);
+
+    for (int i=0; i<DISP_LINES; i++) {
+        uint8_t *start = cursor;
+        for (int j=0; j<DISP_WIDTH; j++) {
+            uint32_t byte = *start++;
+            printf("%02X ", byte);
+
+            if (j == (DISP_WIDTH / 2) - 1) {
+                putc(' ', stdout);
+            }
+        }
+        printf("  ");
+        start = cursor;
+        for (int j=0; j<DISP_WIDTH; j++) {
+            char c = (char)*start++;
+
+            if (c < ' ' || c == '\n' || c == '\r' || c == '\t') {
+                c = '.';
+            }
+
+            putc(c, stdout);
+        }
+
+        printf("\n");
+        if (i+1 == DISP_LINES) break;
+
+        printf("%08X: ", addr+DISP_WIDTH);
+        cursor = start;
+    }
+
+
+#undef DISP_LINES
+#undef DISP_WIDTH
 }
 static void Head(TGXContext* ctx) {
     uint64_t word = MEMACCESS(uint64_t, ctx, REG32(ctx, REG_SP));
     printf("%08X: %016lX (%f)\n", REG32(ctx, REG_SP), word, *(float*)&word);
 }
+
+static void SetBreak(TGXContext* ctx, Instruction* current, uint32_t currentLine, const char* buffer) {
+    SkipSpaces(&buffer);
+
+    double line = ParseVal(&buffer);
+
+    if (isnan(line)) {
+        printf("Error reading the line number.\n");
+        return;
+    }
+
+    uint32_t tline = (uint32_t)line;
+    uint32_t cIp = REG32(ctx, REG_IP);
+    int delta = 1;
+
+    if (currentLine > tline) {
+        delta = -1;
+    }
+
+    while (true) {
+        current += delta;
+        cIp += sizeof(Instruction) * delta;
+        if (current->const_i32 == tline &&
+            (current->opcode == 0x0000 || current->opcode == 0x0116)) {
+
+            if (s_FixedTmpCount >= 1024) {
+                printf("Breakpoint Limit hit\n");
+                return;
+            }
+            s_FixedTmp[s_FixedTmpCount++] = cIp;
+
+            current->opcode = 0x0116;
+            printf("Breakpoint set: \n");
+            PrintInst(current+1);
+            break;
+        }
+
+        if ((void*)current < (void*)ctx->Memory.memory_begin ||
+            (void*)current >= (void*)ctx->Memory.memory_end) {
+            printf("Line %u not found\n", tline);
+            break;
+        }
+    }
+
+
+}
+
+#define FALLTHROUGH
 
 static int LaunchDebugShell(TGXContext* ctx) {
     static bool initialized = false;
@@ -4533,6 +4831,11 @@ static int LaunchDebugShell(TGXContext* ctx) {
     }
     else {
         s_IsTmp = false;
+        for (int i=0; i<s_FixedTmpCount; i++) {
+            if (s_FixedTmp[i] == REG32(ctx, REG_IP)) {
+                s_IsTmp = true;
+            }
+        }
     }
 
     do {
@@ -4541,7 +4844,7 @@ static int LaunchDebugShell(TGXContext* ctx) {
         line = current->const_i32;
         code = current->param16;
 
-        printf("Line %06u|Group %04X> ", line, code);
+        printf("%u|%02X> ", line, code);
         fgets(buffer, sizeof(buffer), stdin);
         buffer[strcspn(buffer, "\n")] = '\0';
 
@@ -4558,6 +4861,9 @@ static int LaunchDebugShell(TGXContext* ctx) {
             case Cmd_Quit:
                 _continue = false;
                 break;
+            case Cmd_Restart:
+                ctx->ExitCode = TGX_EXIT_CODE_RESTART;
+                FALLTHROUGH
             case Cmd_Kill:
                 (*(Instruction*)(ctx->Memory.memory_begin + (REG32(ctx, REG_IP) + sizeof(Instruction)))).opcode = 0x010C;
                 _continue = false;
@@ -4588,312 +4894,13 @@ static int LaunchDebugShell(TGXContext* ctx) {
             case Cmd_PeekStack:
                 Head(ctx);
                 break;
+            case Cmd_Break:
+                SetBreak(ctx, current, line, str);
+                break;
+
         }
     }
     while (_continue);
 
     return 0;
-}
-
-static const char* GetInstStr(uint16_t instr) {
-
-    switch (instr) {
-        case 0x0000: return "nop";
-        case 0x0001:
-        case 0x0002:
-        case 0x0003:
-        case 0x0004:
-        case 0x0005:
-        case 0x0006:
-        case 0x0007:
-        case 0x0008:
-        case 0x0009:
-        case 0x000A:
-        case 0x000B:
-        case 0x000C:
-        case 0x000D:
-        case 0x000E:
-        case 0x000F:
-        case 0x0010:
-        case 0x0011:
-        case 0x0012:
-        case 0x0013:
-        case 0x0014:
-        case 0x0015:
-        case 0x0016:
-        case 0x0018:
-        case 0x001A:
-        case 0x001B:
-        case 0x001C:
-        case 0x001D:
-        case 0x001E:
-        case 0x001F:
-        case 0x0020:
-        case 0x0021:
-        case 0x0022:
-        case 0x0023:
-        case 0x0024:
-            return "mov";
-        case 0x0017:
-        case 0x0019:
-            return "movc";
-        case 0x0025:
-            return "movia";
-        case 0x0026:
-            return "movda";
-        case 0x0027:
-        case 0x0028:
-        case 0x0029:
-        case 0x002A:
-        case 0x002B:
-            return "swap";
-        case 0x002C: return "mcpy";
-        case 0x002D: return "mcmp";
-        case 0x002E:
-        case 0x002F:
-        case 0x0030:
-        case 0x0031:
-            return "mclr";
-        case 0x0032:
-        case 0x0033:
-        case 0x0034:
-        case 0x0035:
-        case 0x0036:
-        case 0x0037:
-        case 0x0038:
-        case 0x0039:
-        case 0x003A:
-        case 0x003B:
-        case 0x0041:
-            return "push";
-        case 0x003C:
-        case 0x003D:
-        case 0x003E:
-        case 0x003F:
-        case 0x0040:
-        case 0x0042:
-            return "pop";
-        case 0x0043: return "tsto";
-        case 0x0044: return "tld";
-        case 0x0045:
-        case 0x0046:
-        case 0x0047:
-        case 0x0048:
-        case 0x0049:
-        case 0x004A:
-        case 0x004B:
-        case 0x004C:
-        case 0x00B6:
-        case 0x00B7:
-            return "add";
-        case 0x004D:
-        case 0x004E:
-        case 0x004F:
-        case 0x0050:
-        case 0x0051:
-        case 0x0052:
-        case 0x0053:
-        case 0x0054:
-        case 0x00B8:
-        case 0x00B9:
-            return "sub";
-        case 0x0055:
-        case 0x0056:
-        case 0x0057:
-        case 0x0058:
-        case 0x0059:
-        case 0x005A:
-        case 0x005B:
-        case 0x005C:
-        case 0x00BA:
-        case 0x00BB:
-            return "mul";
-        case 0x005D:
-        case 0x005E:
-        case 0x005F:
-        case 0x0060:
-        case 0x0061:
-        case 0x0062:
-        case 0x0063:
-        case 0x0064:
-        case 0x00BC:
-        case 0x00BD:
-            return "div";
-        case 0x0065:
-        case 0x0066:
-        case 0x0067:
-        case 0x0068:
-        case 0x0069:
-        case 0x006A:
-        case 0x006B:
-        case 0x006C:
-        case 0x00BE:
-        case 0x00BF:
-            return "mod";
-        case 0x006D:
-        case 0x006E:
-        case 0x006F:
-        case 0x0070:
-        case 0x00DD:
-            return "neg";
-        case 0x0071:
-        case 0x0072:
-        case 0x0073:
-        case 0x0074:
-            return "inc";
-        case 0x0075:
-        case 0x0076:
-        case 0x0077:
-        case 0x0078:
-            return "dec";
-        case 0x0079:
-        case 0x007A:
-        case 0x007B:
-        case 0x007C:
-        case 0x007D:
-        case 0x007E:
-        case 0x007F:
-        case 0x0080:
-            return "rbr";
-        case 0x0081:
-        case 0x0082:
-        case 0x0083:
-        case 0x0084:
-        case 0x0085:
-        case 0x0086:
-        case 0x0087:
-        case 0x0088:
-            return "rbl";
-        case 0x0089:
-        case 0x008A:
-        case 0x008B:
-        case 0x008C:
-        case 0x008D:
-        case 0x008E:
-        case 0x008F:
-        case 0x0090:
-        case 0x00C4:
-        case 0x00C5:
-            return "cmp";
-        case 0x0091:
-        case 0x0092:
-        case 0x0093:
-        case 0x0094:
-            return "land";
-        case 0x0095:
-        case 0x0096:
-        case 0x0097:
-        case 0x0098:
-            return "lor";
-        case 0x0099:
-        case 0x009A:
-        case 0x009B:
-        case 0x009C:
-            return "lnot";
-        case 0x009D:
-        case 0x009E:
-        case 0x009F:
-        case 0x00A0:
-            return "and";
-        case 0x00A2:
-        case 0x00A3:
-        case 0x00A4:
-        case 0x00A5:
-            return "xor";
-        case 0x00A6:
-        case 0x00A7:
-        case 0x00A8:
-        case 0x00A9:
-            return "or";
-        case 0x00AA:
-        case 0x00AB:
-        case 0x00AC:
-        case 0x00AD:
-            return "not";
-        case 0x00AE:
-        case 0x00AF:
-            return "cmxb";
-        case 0x00B0:
-        case 0x00B1:
-            return "sqr";
-        case 0x00B2:
-        case 0x00B3:
-        case 0x00B4:
-        case 0x00B5:
-        case 0x00E6:
-            return "abs";
-        case 0x00C0: return "floor";
-        case 0x00C1: return "ceil";
-        case 0x00C2: return "floor";
-        case 0x00C3: return "sqrt";
-        case 0x00C6: return "vnorm";
-        case 0x00C7: return "vadd";
-        case 0x00C8: return "vsub";
-        case 0x00C9: return "vmul";
-        case 0x00CA: return "vdiv";
-        case 0x00CB: return "vdot";
-        case 0x00CC: return "vlen";
-        case 0x00CD:
-        case 0x00CE:
-            return "cos";
-        case 0x00CF:
-        case 0x00D0:
-            return "sin";
-        case 0x00D1:
-        case 0x00D2:
-            return "tan";
-        case 0x00D3:
-        case 0x00D4:
-            return "acos";
-        case 0x00D5:
-        case 0x00D6:
-            return "asin";
-        case 0x00D7:
-        case 0x00D8:
-        case 0x00D9:
-            return "atan";
-        case 0x00DA: return "bcosmxd";
-        case 0x00DB: return "bsinmxd";
-        case 0x00DC: return "btanmxd";
-        case 0x00DE: return "vswz";
-        case 0x00DF: return "pow";
-        case 0x00E0: return "log";
-        case 0x00E1: return "ln";
-        case 0x00E2: return "epow";
-        case 0x00E3: return "ldpi";
-        case 0x00E4: return "lde";
-        case 0x00E5: return "inv";
-        case 0x00E7:
-        case 0x00E8:
-            return "jmp";
-        case 0x00E9:
-        case 0x00EA:
-        case 0x00ED:
-            return "jz";
-        case 0x00EB:
-        case 0x00EC:
-        case 0x00EE:
-            return "jnz";
-        case 0x00EF:
-        case 0x00F0:
-            return "jgt";
-        case 0x00F1:
-        case 0x00F2:
-            return "jlt";
-        case 0x00F3:
-        case 0x00F4:
-            return "jge";
-        case 0x00F5:
-        case 0x00F6:
-            return "jle";
-        case 0x010B: return "ret";
-        case 0x010C: return "hlt";
-        case 0x010D:
-        case 0x010E:
-            return "int";
-        case 0x0115: return "syscall";
-        case 0x0116: return "break";
-        default: return NULL;
-    }
-
 }

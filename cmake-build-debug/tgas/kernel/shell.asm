@@ -48,7 +48,6 @@ shell_start:
 
 
 shell_login:
-    break 0x0001;
     ; allocate return value
     sub sp, 4;
     ; rf holds the address of the return value
@@ -63,6 +62,8 @@ shell_login:
     mov ra, login_buffer;
     mov rb, LOGIN_BUFFER_SIZE;
     syscall DEBUG_SERIAL_FGETS;
+
+    mov ra, login_buffer;
     jmp shell_bsan;
 
     ; check the username
@@ -71,6 +72,7 @@ shell_login:
     dec rd;
     mov rc, user_name;
     mcmp rz, ra, rc, rd;
+
     jnz SH_INVALID_USERNAME;
 
     ; clear the buffer
@@ -87,6 +89,7 @@ shell_login:
     mov ra, login_buffer;
     mov rb, LOGIN_BUFFER_SIZE
     syscall DEBUG_SERIAL_FGETS;
+    mov ra, login_buffer;
     jmp shell_bsan;
 
     ; check the password
@@ -107,13 +110,13 @@ shell_login:
     mov [rf], 1;
     jmp SH_END;
 SH_INVALID_USERNAME:
-    syscall DEBUG_SERIAL_PRINT_REGS;
-
+    break;
     mov ra, login_msg_unknown_usr;
     syscall DEBUG_SERIAL_PRINTF;
     mov [rf], 0;
     jmp SH_END;
 SH_INVALID_PSWD:
+    break;
     mov ra, login_msg_invalid_pwrd;
     syscall DEBUG_SERIAL_PRINTF;
     mov [rf], 0;
@@ -125,6 +128,7 @@ shell_bsan:
     push jr;
     push;
 
+    xor rb, rb;
     mov ra, login_buffer;
 SH_BSAN_LBEG:
     mov rcs, 10;
@@ -141,4 +145,3 @@ SH_BSAN_LEND:
     pop;
     pop jr;
     ret;
-  //TODO Debugging tools

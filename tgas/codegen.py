@@ -144,28 +144,6 @@ def process(input_file, output_file):
 
         header_str.append("};\n")
 
-        # header_str.append("TableEntry %s_ParamTable[%s] {" % (pneumonic, table_len+1))
-        #
-        # for i in range(table_len+1):
-        #
-        #     param_types = ""
-        #     pid = i
-        #     while (pid & mask) != 0:
-        #         atype = pid & mask
-        #         pid >>= mask_width
-        #
-        #         rtype = mask_enum[atype]
-        #         param_types = rtype + (", %s" % param_types if param_types != "" else "")
-        #
-        #     for option in options:
-        #         if option["paramid"] == i:
-        #             header_str.append(f"    /* {i:08X} */ {{ {option['opcode']}, {option['special_handle']} }}, /* {param_types} */")
-        #             break
-        #     else:
-        #         header_str.append(f"    /* {i:08X} */ {{ 0x{0xFFFF:04X}, InvalidOperandParams }}, /* {param_types} */" ) #"    { %s, %s }, /* %s */" % ( 0xFFFF, "InvalidOperandParams", param_types))
-        #
-        # header_str.append("};\n")
-
     header_str.append("static std::unordered_map<std::string, std::unordered_map<uint32_t, TableEntry>*> TableMap {");
 
     for pneumonic in pneumonics:
@@ -177,6 +155,34 @@ def process(input_file, output_file):
 
     with open(output_file, "w") as f:
         f.write("\n".join(header_str))
+
+    opcodes = {}
+    for pneumonic in pneumonics:
+        for option in pneumonics[pneumonic]:
+            opcodes[option["opcode"]] = { "paramid": option["paramid"], "name": pneumonic }
+
+    sorted_opcodes = sorted(opcodes.items())
+
+    #print(sorted_opcodes)
+
+    c_table = ["#ifdef INCLUDE_DATA_TABLE"]
+    c_table.append("typedef struct { uint16_t opcode; uint32_t param_id; const char* name; } Mnemonic;\n")
+    c_table.append("#define DISASSEMBLER_TABLE_LEN %s" % len(sorted_opcodes))
+    c_table.append("static Mnemonic s_DisassemblerTable[] = {")
+    for op in sorted_opcodes:
+        c_table.append(f"    (Mnemonic){{ .opcode = {op[0]}, .param_id = {op[1]["paramid"]}, .name = \"{op[1]["name"]}\" }},")
+    c_table.append("};")
+
+    c_table.append("\nstatic Mnemonic* SearchOpCode(uint16_t opcode){")
+    c_table.append("    for(int i=0; i<DISASSEMBLER_TABLE_LEN; ++i){\n")
+    c_table.append("        if(s_DisassemblerTable[i].opcode == opcode) return (s_DisassemblerTable + i);\n")
+    c_table.append("    }")
+    c_table.append("    return NULL;\n}")
+
+    c_table.append("#endif //INCLUDE_DATA_TABLE")
+
+    with open("../src/optable.inc.c", "w") as f:
+        f.write("\n".join(c_table))
 
 
 def print_help():

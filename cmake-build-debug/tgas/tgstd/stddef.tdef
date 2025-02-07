@@ -1,7 +1,7 @@
 #ifndef __STDDEF__
 #define __STDDEF__
 
-
+#define GET_TIME_MS             0x0000A000
 #define DEBUG_SERIAL_PRINT_REGS 0xF0000000
 #define DEBUG_SERIAL_PRINTF     0xF0000001
 #define DEBUG_SERIAL_SCANF_MEM  0xF0000002

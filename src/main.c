@@ -1,27 +1,49 @@
 #include "TGX.h"
 
+#include <time.h>
+
 int load_rom(TGXContext* context);
 
 uint32_t swi_handler(void* context, uint32_t code);
 
-int main(void) {
-    TGXContext context = {0};
-
-    if (alloc_principle_memory(&context.Memory) != TGX_SUCCESS) {
+int execute(TGXContext *context) {
+    if (alloc_principle_memory(&context->Memory) != TGX_SUCCESS) {
         printf("Unable to allocate required memory to start the vm. \n");
         return 1;
     }
 
-    init_program_thread(&context.PU);
-    init_graphics_thread(&context.GU);
+    init_program_thread(&context->PU);
+    init_graphics_thread(&context->GU);
 
-    if (load_rom(&context) != TGX_SUCCESS) {
+    if (load_rom(context) != TGX_SUCCESS) {
         return 1;
     }
 
-    context.SWIFunc = swi_handler;
+    context->SWIFunc = swi_handler;
 
-    program_thread_exec(&context);
+    program_thread_exec(context);
+    return 0;
+}
+
+int main(void) {
+    TGXContext context = {0};
+
+    do {
+        if (execute(&context) != 0) {
+            break;
+        }
+
+        if (context.ExitCode == TGX_EXIT_CODE_RESTART) {
+            free_principle_memory(&context.Memory);
+            destroy_graphics_thread(&context.GU);
+            destroy_program_thread(&context.PU);
+
+            context.ExitCode = TGX_EXIT_CODE_NONE;
+            printf("Restarting Machine\n");
+            continue;
+        }
+        break;
+    } while (true);
 
     return 0;
 }
@@ -72,6 +94,10 @@ uint32_t swi_handler(void* context, uint32_t code) {
     TGXContext* ctx = context;
 
     switch (code) {
+        case 0x0000A000:
+            struct timespec ts;
+            clock_gettime(CLOCK_REALTIME, &ts);
+            return (uint32_t)(ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL);
         case 0xF0000000:
             for (int i=0; i< REG32_COUNT; i++) {
                 printf("%2X: %8X (%u)\n", i, ctx->PU.gp32[i].full, ctx->PU.gp32[i].full);

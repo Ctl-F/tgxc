@@ -406,7 +406,7 @@ breakgt [code]
 breakge [code]
 breaklt [code]
 breakle [code]
-
+error opcode + error separator between program section and data section
 these will break on the PROGRAM FLAGS register, the code has NOTHING TO DO with the break condition.
 
 Data Section:

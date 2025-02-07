@@ -792,7 +792,7 @@ bool read_and_emit_instruction(CompilerContext& ctx) {
         }
 
         if (!s_DebugMode && cmd == Command::Break) {
-
+            ctx.program_section.pop_back();
         }
 
         return true;
@@ -1252,7 +1252,7 @@ int main(int argc, char **argv) {
     try {
         CompilerContext ctx{0};
         ctx.input = output.c_str();
-        std::cout << "Compiling...\n";
+        std::cout << "Compiling" << (s_DebugMode ? " with debugging enabled" : "") << "...\n";
         if(!compile_section(ctx)){
             std::cerr << "Error compiling " << argv[1] << "\n";
             return 1;
