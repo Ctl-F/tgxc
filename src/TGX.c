@@ -3872,6 +3872,7 @@ enum COMMANDS {
     Cmd_SetReg,
     Cmd_Kill,
     Cmd_Step,
+    Cmd_StepOvr,
 };
 
 enum REGS {
@@ -3897,6 +3898,7 @@ static void ShellHelp(void) {
     printf("peek [addr]        Shows the contents of memory at the address\n");
     printf("head               Shows the contents at the top of the stack\n");
     printf("step               Steps forward by one instruction\n");
+    printf("stepovr            Steps forward skipping over function calls\n");
 }
 
 static uint32_t s_TmpBreak = {0};
@@ -3922,6 +3924,7 @@ static int ParseCommand(const char** ptr) {
     if (strncmp(*ptr, "peek", 4) == 0 && !isalnum((*ptr)[4])){ (*ptr)+=4; return Cmd_PeekMem; }
     if (strncmp(*ptr, "head", 4) == 0 && !isalnum((*ptr)[4])){ (*ptr)+=4; return Cmd_PeekStack; }
     if (strncmp(*ptr, "step", 4) == 0 && !isalnum((*ptr)[4])){ (*ptr)+=4; return Cmd_Step; }
+    if (strncmp(*ptr, "stepovr", 7) == 0 && !isalnum((*ptr)[7])){ (*ptr)+=7; return Cmd_StepOvr; }
     return Cmd_Unknown;
 }
 static int ParseReg(const char** ptr) {
@@ -4136,8 +4139,10 @@ static void PrintInst(Instruction* inst) {
 
     printf("%s[%04X] %02X %02X %08X (%f)\n", inst_str, opcode, param0, param1, inst->const_i32, inst->const_f32);
 }
+//TODO: Peek as hex bytes (it's more useful)
+//TODO: Dissasembler table and better dissassembled output.
 
-static void StepNext(TGXContext* ctx, Instruction* currentInst) {
+static void StepNext(TGXContext* ctx, Instruction* currentInst, int step_into) {
     uint32_t ip = REG32(ctx, REG_IP);
 
     //Instruction* nextInstr = currentInst + 1;
@@ -4154,18 +4159,19 @@ static void StepNext(TGXContext* ctx, Instruction* currentInst) {
 
     switch (nextInstr->opcode) {
         case 0x00E7:
-            ip = REG32(ctx, nextInstr->params[0]) - sizeof(Instruction);
+            ip = REG32(ctx, nextInstr->params[0]) ;
             currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
             nextInstr = currentInst + 1;
             break;
         case 0x00E8:
-            ip = nextInstr->const_i32 - sizeof(Instruction);
+            ip = nextInstr->const_i32 ;
             currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
             nextInstr = currentInst + 1;
             break;
         case 0x00E9:
+            if (!step_into) break;
             if (REG32(ctx, REG_PF) & TGX_PF_Flag_ZeroBit) {
-                ip = REG32(ctx, nextInstr->params[0]) - sizeof(Instruction);
+                ip = REG32(ctx, nextInstr->params[0]) ;
                 currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
                 nextInstr = currentInst + 1;
                 break;
@@ -4179,16 +4185,18 @@ static void StepNext(TGXContext* ctx, Instruction* currentInst) {
             nextInstr = currentInst + 1;
             break;
         case 0x00EA:
+            if (!step_into) break;
             if (REG32(ctx, REG_PF) & TGX_PF_Flag_ZeroBit) {
-                ip = nextInstr->const_i32 - sizeof(Instruction);
+                ip = nextInstr->const_i32 ;
                 currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
                 nextInstr = currentInst + 1;
                 break;
             }
             break;
         case 0x00EB:
+            if (!step_into) break;
             if (!(REG32(ctx, REG_PF) & TGX_PF_Flag_ZeroBit)) {
-                ip = REG32(ctx, nextInstr->params[0]) - sizeof(Instruction);
+                ip = REG32(ctx, nextInstr->params[0]) ;
                 currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
                 nextInstr = currentInst + 1;
                 break;
@@ -4202,29 +4210,33 @@ static void StepNext(TGXContext* ctx, Instruction* currentInst) {
             nextInstr = currentInst + 1;
             break;
         case 0x00EC:
+            if (!step_into) break;
             if (!(REG32(ctx, REG_PF) & TGX_PF_Flag_ZeroBit)) {
-                ip = nextInstr->const_i32 - sizeof(Instruction);
+                ip = nextInstr->const_i32 ;
                 currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
                 nextInstr = currentInst + 1;
             }
             break;
         case 0x00ED:
+            if (!step_into) break;
             if (REG32(ctx, REG_PF) & TGX_PF_Flag_ZeroBit) {
-                ip = REG32(ctx, nextInstr->params[0]) - sizeof(Instruction);
+                ip = REG32(ctx, nextInstr->params[0]) ;
                 currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
                 nextInstr = currentInst + 1;
             }
             break;
         case 0x00EE:
+            if (!step_into) break;
             if (!(REG32(ctx, REG_PF) & TGX_PF_Flag_ZeroBit)) {
-                ip = REG32(ctx, nextInstr->params[0]) - sizeof(Instruction);
+                ip = REG32(ctx, nextInstr->params[0]) ;
                 currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
                 nextInstr = currentInst + 1;
             }
             break;
         case 0x00EF:
+            if (!step_into) break;
             if (!(REG32(ctx, REG_PF) & (TGX_PF_Flag_NegBit | TGX_PF_Flag_ZeroBit))) {
-                ip = REG32(ctx, nextInstr->params[0]) - sizeof(Instruction);
+                ip = REG32(ctx, nextInstr->params[0]) ;
                 currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
                 nextInstr = currentInst + 1;
             }
@@ -4239,28 +4251,98 @@ static void StepNext(TGXContext* ctx, Instruction* currentInst) {
             }
             break;
         case 0x00F0:
-
+            if (!step_into) break;
+            if (!(REG32(ctx, REG_PF) & (TGX_PF_Flag_NegBit | TGX_PF_Flag_ZeroBit))) {
+                ip = nextInstr->const_i32 ;
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+            }
             break;
         case 0x00F1:
-
+            if (!step_into) break;
+            if (REG32(ctx, REG_PF) & TGX_PF_Flag_NegBit) {
+                ip = REG32(ctx, nextInstr->params[0]) ;
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+                break;
+            }
+            if (nextInstr->params[1] & TGX_JMP_ELSE_FLAG) {
+                ip = nextInstr->const_i32;
+                if (nextInstr->params[1] & TGX_JMP_USE_REG_FLAG) {
+                    ip = REG32(ctx, ip);
+                }
+                ip -= sizeof(Instruction);
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+            }
             break;
         case 0x00F2:
-
+            if (!step_into) break;
+            if ((REG32(ctx, REG_PF) & TGX_PF_Flag_NegBit)) {
+                ip = nextInstr->const_i32 ;
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+                break;
+            }
             break;
         case 0x00F3:
-
+            if (!step_into) break;
+            if (!(REG32(ctx, REG_PF) & (TGX_PF_Flag_NegBit))) {
+                ip = REG32(ctx, nextInstr->params[0]) ;
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+                break;
+            }
+            if (nextInstr->params[1] & TGX_JMP_ELSE_FLAG) {
+                ip = nextInstr->const_i32;
+                if (nextInstr->params[1] & TGX_JMP_USE_REG_FLAG) {
+                    ip = REG32(ctx, ip);
+                }
+                ip -= sizeof(Instruction);
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+                break;
+            }
             break;
         case 0x00F4:
-
+            if (!step_into) break;
+            if (!(REG32(ctx, REG_PF) & TGX_PF_Flag_NegBit)) {
+                ip = nextInstr->const_i32 ;
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+                break;
+            }
             break;
         case 0x00F5:
-
+            if (!step_into) break;
+            if (REG32(ctx, REG_PF) & (TGX_PF_Flag_NegBit | TGX_PF_Flag_ZeroBit)) {
+                ip = REG32(ctx, nextInstr->params[0]) ;
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+                break;
+            }
+            if (nextInstr->params[1] & TGX_JMP_ELSE_FLAG) {
+                ip = nextInstr->const_i32;
+                if (nextInstr->params[1] & TGX_JMP_USE_REG_FLAG) {
+                    ip = REG32(ctx, ip);
+                }
+                ip -= sizeof(Instruction);
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+                break;
+            }
             break;
         case 0x00F6:
-
+            if (!step_into) break;
+            if (REG32(ctx, REG_PF) & (TGX_PF_Flag_ZeroBit | TGX_PF_Flag_NegBit)) {
+                ip = nextInstr->const_i32 ;
+                currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
+                nextInstr = currentInst + 1;
+                break;
+            }
             break;
-        case 0x010B:
-            ip = REG32(ctx, REG_JR) - sizeof(Instruction);
+        case 0x010B: // ret
+            ip = REG32(ctx, REG_JR) ;
             currentInst = (Instruction*)(ctx->Memory.memory_begin + ip);
             nextInstr = currentInst + 1;
             break;
@@ -4480,8 +4562,12 @@ static int LaunchDebugShell(TGXContext* ctx) {
                 (*(Instruction*)(ctx->Memory.memory_begin + (REG32(ctx, REG_IP) + sizeof(Instruction)))).opcode = 0x010C;
                 _continue = false;
                 break;
+            case Cmd_StepOvr:
+                StepNext(ctx, current, false);
+                _continue = false;
+                break;
             case Cmd_Step:
-                StepNext(ctx, current);
+                StepNext(ctx, current, true);
                 _continue = false;
                 break;
             case Cmd_PrintReg:
