@@ -466,34 +466,32 @@ does.
 0x00F5 0x0E Jle Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
 0x00F6 0x0F Jle Const32
 
-//TODO: Jge, Jle, Jgt, Jlt nonbranch variants
-0x00F7 0x10 (nop) **Jne Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
-0x00F8 0x11 (nop) **Jne Const32
 
-0x00F9 - 0x010A are NOPS. Call functionality is handled by jumps, the call family as originally planned is redundant
+0x00F7 0x10 //NOP: Will determine better fast_register api later. - cmp fast_a, fast_b
+0x00F8 0x11 //NOP: Will determine better fast_register api later. - inc fast_a
 
-0x00F9 0x12 Call Reg32
-0x00FA 0x13 Call Const32
+0x00F9 0x12 //NOP: Will determine better fast_register api later. - mov fast_a, Reg32
+0x00FA 0x13 //NOP: Will determine better fast_register api later. - mov fast_b, Reg32
 
-0x00FB 0x14 Callz Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
-0x00FC 0x15 Callz Const32
-0x00FD 0x16 Callnz Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
-0x00FE 0x17 Callnz Const32
+0x00FB 0x14 //NOP: Will determine better fast_register api later. - mov fast_a, fast_b
+0x00FC 0x15 //NOP: Will determine better fast_register api later. - mov fast_a, fast_c
+0x00FD 0x16 //NOP: Will determine better fast_register api later. - mov fast_b, fast_a
+0x00FE 0x17 //NOP: Will determine better fast_register api later. - mov fast_b, fast_c
 
-0x00FF 0x18 Calleq Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
-0x0100 0x19 Calleq Const32
-0x0101 0x1A Callgt Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
-0x0102 0x1B Callgt Const32
+0x00FF 0x18 //NOP: Will determine better fast_register api later. - mov fast_c, fast_a
+0x0100 0x19 //NOP: Will determine better fast_register api later. - mov fast_c, fast_b
+0x0101 0x1A //NOP: Will determine better fast_register api later. - mov Reg32, fast_a
+0x0102 0x1B //NOP: Will determine better fast_register api later. - mov Reg32, fast_b
 
-0x0103 0x1C Calllt Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
-0x0104 0x1D Calllt Const32
-0x0105 0x1E Callge Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
-0x0106 0x1F Callge Const32
+0x0103 0x1C //NOP: Will determine better fast_register api later. - fast_a = fast_b + fast_c
+0x0104 0x1D //NOP: Will determine better fast_register api later. - fast_a = fast_b - fast_c
+0x0105 0x1E //NOP: Will determine better fast_register api later. - fast_a = fast_b * fast_c
+0x0106 0x1F //NOP: Will determine better fast_register api later. - fast_a = fast_b / fast_c
 
-0x0107 0x20 Callle Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
-0x0108 0x21 Callle Const32
-0x0109 0x22 Callne Reg32 [ELSEFLAG] [REG-CONSTFLAG] [ELSEReg32|ELSEConst32]
-0x010A 0x23 Callne Const32
+0x0107 0x20 //NOP: Will determine better fast_register api later. - fast_a = fast_b & fast_c
+0x0108 0x21 //NOP: Will determine better fast_register api later. - fast_a = fast_b | fast_c
+0x0109 0x22 //NOP: Will determine better fast_register api later. - fast_a = fast_b & fast_c
+0x010A 0x23 //NOP: Will determine better fast_register api later. - fast_a = ~fast_b
 
 0x010B 0x24 Ret
 0x010C 0x25 Hlt
@@ -508,20 +506,21 @@ TODO: Implement extension port protocol
 
 0x0113 0x2C Deinit-EP Reg32
 0x0114 0x2D Deinit-EP Const32
-0x0115 0x2E SysCall Const32
-0x0116 0x2F Break **Acts as a breakpoint** TODO: implement break point.
+0x0115 0x2E SysCall Const32 (assigns return value to RA)
+0x0116 0x2F Break  Acts as a breakpoint and begins the debugger shell (assembly file needs to have been compiled in debug mode)
 
 [ Memory Control ]
 TODO: Implement graphics API
-0x0117 0x00 GQPS                Graphics Queue Poll Status, sets the Program Flag equality bit if the GQ and GC are free for recording
+0x0117 0x00 GQPS                Graphics Queue Poll Status, sets the Program Flag equality bit if the GQ is free for recording
 0x0118 0x01 GQS                 Graphics Queue Submit, set the availability of the GQ to false and trigger GP for rendering
-0x0119 0x02 GQAI                Graphics Queue Add Instruction, add an instruction from registers and increment queue pointer
+0x0119 0x02 GQAI                Graphics Queue Add Instruction, add an instruction from registers and increment queue pointer (adds from M0 and M1)
 0x011A 0x03 GQR                 Graphics Queue Reset, reset the queue pointer to the start of the queue for recording
 0x011B 0x04 GQSI Reg32, Reg32   Graphics Queue Set Instructions from Reg32 to Reg32 (bulk upload of instructions)
-0x011C 0x05 GQPC                Graphics Queue Poll Count
-0x011D 0x06 GQPF                Graphics Queue Poll Free Instructions (how many can I record before the queue is full?)
+0x011C 0x05 GQPC                Graphics Queue Poll Count (assigns to RA) (How many bytes have I already written)
+0x011D 0x06 GQPF                Graphics Queue Poll Free (assigns to RA) returns the NUMBER OF BYTES, not the NUMBER OF INSTRUCTIONS
 
-0x001E      RMOV R32, R32       Raw Move that does not affect PF
+// NOTE THAT This has become obsolete, all movs are now raw moves for performance reasons
+0x011E      GQPE                Graphics Queue Poll Error (if there is an error the PF will be updated and the error code popped off the error stack into RAS. Error handling needs to have been enabled)
 
 
 ------- Graphics Unit ---------
@@ -536,8 +535,43 @@ limitation of being able to pack 4 texture coordinates into 6 bytes. We use 12bi
 this will need to be split up. Though that shouldn't be an issue in practice as the window will never larger than this and
 the probability of the TGX console ever having enough memory to support a 4k texture is unlikely*/
 
-A command entry is 16 bytes long (int64).
+A command entry is 16 bytes long (2xint64).
 
+[ int64_t Command ID and Flags ] [ int32_t param_buffer_begin ] [ int32_t param_buffer_end ]
+
+OpCodes: In parentheses will the list of values expected within the given param buffer
+0x0000 NOP
+0x0001 Initialize Host Window ( str* Title, i32 DisplayMode )
+0x0002 Close Host Window (void)
+0x0003 Set Clear Color ( i8 r, i8 g, i8 b )
+0x0004 Clear Window
+0x0005 Present Buffer
+0x0006 Configure Error Stack **( u8* stack_begin, u8* stack_end)
+0x0007 **TEMPORARY** SDLPollEvents ( i8 dest_for_quit_event )
+
+0xFFFFFFFF Finalize Batch and Go Inactive
+
+**
+    These addresses aren't stored in parameter buffer indices, they are stored directly
+    where the parameter buffer would be. Effectively, you store the pointers directly in
+    the command, NOT in a buffer pointed to from the command.
+
+
+Display Modes:
+    0x00000000 Default Resolution (640x480)
+    0x80WWWHHH Custom Resolution (WWWxHHH)
+
+
+
+
+
+
+
+
+
+
+
+Old, probably inaccurate
 [ 00 00 ] [ 00 00  00 00 00 00 ] [..]
 [OPCODE ] [ PARAMS             ] [..]
 

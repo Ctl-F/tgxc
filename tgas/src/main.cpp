@@ -28,6 +28,7 @@ enum class Command {
     Dec, Div,
     Epow,
     Floor,
+    Gqps, Gqs, Gqai, Gqr, Gqsi, Gqpc, Gqpf, Gqpe,
     Hlt,
     Int, Inc, Inv,
     Jmp, Jz, Jnz, Jgt, Jge, Jlt, Jle,
@@ -174,6 +175,7 @@ static std::unordered_map<char, std::vector<std::string>> s_Commands = {
     {'d', { "dec", "div", }},
     {'e', { "epow", }},
     {'f', { "floor", }},
+    {'g', { "gqps", "gqs", "gqai", "gqr", "gqsi", "gqpc", "gqpf", "gqpe" }},
     {'h', { "hlt", }},
     {'i', { "int", "inc", "inv", }},
     {'j', { "jmp", "jz", "jnz", "jgt", "jge", "jlt", "jle", }},
@@ -214,6 +216,8 @@ static std::unordered_map<std::string, Command> s_CommandIDs = {
     {"vnorm", Command::Vnorm},     {"vadd", Command::Vadd},       {"vsub", Command::Vsub},
     {"vmul", Command::Vmul},       {"vdiv", Command::Vdiv},       {"vdot", Command::Vdot},
     {"vlen", Command::Vlen},       {"vswz", Command::Vswz},       {"xor", Command::Xor},
+    {"gqps", Command::Gqps}, {"gqs", Command::Gqs}, {"gqai", Command::Gqai}, { "gqr", Command::Gqr},
+    {"gqsi", Command::Gqsi}, {"gqpc", Command::Gqpc}, {"gqpf", Command::Gqpf}, {"gqpe", Command::Gqpe},
 };
 
 static std::unordered_map<Command, std::string> s_CommandNames = {
@@ -242,6 +246,8 @@ static std::unordered_map<Command, std::string> s_CommandNames = {
     {Command::Vnorm, "vnorm"},     {Command::Vadd, "vadd"},       {Command::Vsub, "vsub"},
     {Command::Vmul, "vmul"},       {Command::Vdiv, "vdiv"},       {Command::Vdot, "vdot"},
     {Command::Vlen, "vlen"},       {Command::Vswz, "vswz"},       {Command::Xor, "xor"},
+    {Command::Gqps, "gqps"}, {Command::Gqs, "gqs"}, {Command::Gqai, "gqai"}, { Command::Gqr, "gqr"},
+    {Command::Gqsi, "gqsi"}, {Command::Gqpc, "gqpc"}, {Command::Gqpf, "gqpf"}, {Command::Gqpe, "gqpe"},
 };
 
 

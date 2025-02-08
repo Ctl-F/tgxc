@@ -416,3 +416,12 @@ int Imm > 0x010E
 syscall Imm > 0x0115
 break > 0x0116, EncodeBreak
 break Imm > 0x0116, EncodeBreak
+
+gqps > 0x0117
+gqs > 0x0118
+gqai > 0x0119
+gqr > 0x011A
+gqsi R32 R32 > 0x011B
+gqpc > 0x011C
+gqpf > 0x011D
+gqpe > 0x011E

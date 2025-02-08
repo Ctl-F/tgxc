@@ -26,10 +26,105 @@ login_msg_authenticated: str "Welcome %s\n"
 
 shell_dummy: str "<SHELL>\n";
 
+window_title: str "Hello Window";
+
+initialize_system_pbuffer_begin:
+title_ptr: i32 0
+window_mode: i32 0
+initialize_system_pbuffer_end:
+
+set_clear_color_pbuffer_begin:
+clear_color_rgb: i8 0, 100, 128
+set_clear_color_pbuffer_end:
+
+quit_event_triggered: i8 0
+
 $section prog
+init_graphics_test:
+    push jr;
+
+    break;
+
+    gqr;
+
+    ; initialize system
+    mov ra, 0x00010000;
+    mov m0h, ra;
+    mov ra, window_title;
+    mov rb, title_ptr;
+    mov [rb], ra;
+    mov ra, initialize_system_pbuffer_begin;
+    mov m1h, ra;
+    mov ra, initialize_system_pbuffer_end;
+    mov m1l, ra;
+    gqai;
+
+    ; set clear color
+    mov ra, 0x00030000;
+    mov m0h, ra;
+    mov ra, set_clear_color_pbuffer_begin;
+    mov m1h, ra;
+    mov ra, set_clear_color_pbuffer_end;
+    mov m1l, ra;
+    gqai;
+
+    ; clear
+    mov ra, 0x00040000;
+    mov m0h, ra;
+    gqai;
+
+    mov ra, 0xFFFFFFFF;
+    mov m0h, ra;
+    gqai;
+
+    gqs;
+
+    ; wait for this to finish
+sync_loop_beg:
+    gqps;
+    jnz sync_loop_beg;
+
+    ;; TODO: Error checking
+    ; dummy eventloop
+event_loop_beg:
+    gqr;
+    mov ra, 0x00050000;
+    mov m0h, ra;
+    gqai;
+
+    mov ra, 0x00070000;
+    mov m0h, ra;
+    mov ra, quit_event_triggered;
+    mov m1h, ra;
+    gqai;
+
+    gqs;
+
+    mov ra, quit_event_triggered;
+    mov ras, [ra];
+    cmp ras, 0;
+    jz event_loop_beg;
+event_loop_end:
+
+    mov ra, 0x00020000;
+    mov m0h, ra;
+    gqai;
+
+    gqs;
+
+    pop jr;
+    ret;
+
+
+
 shell_init:
     push jr;
 
+    jmp init_graphics_test;
+    pop jr;
+    ret;
+
+;; disabled
     jmp shell_login;
     pop ra;
     jz shell_init;

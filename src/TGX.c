@@ -4,6 +4,7 @@
 #include "TGX.h"
 #include <math.h>
 #include <immintrin.h>
+#include "graphics_cache_map.h"
 
 #define CPU_TICKS(result) asm volatile ("rdtsc" : "=A"(result))
 
@@ -38,8 +39,6 @@ int alloc_principle_memory(PrincipleMemory* mem){
     return TGX_SUCCESS;
 }
 
-
-
 void free_principle_memory(PrincipleMemory* mem){
     free(mem->memory_begin);
     *mem = (PrincipleMemory){0};
@@ -70,7 +69,25 @@ int init_program_thread(ProgramThread* pu) {
 void destroy_program_thread(ProgramThread* pu){
 
 }
-int init_graphics_thread(GraphicsThread* gu){
+
+void* GraphicsMain(void* arg);
+void TriggerGraphics(GraphicsThread* gu);
+
+int init_graphics_thread(GraphicsThread* gu, PrincipleMemory* memBase){
+    pthread_create(&gu->thread, NULL, GraphicsMain, &gu);
+
+    gu->command_buffer_begin = memBase->graphics_queue_begin;
+    gu->command_buffer_end = memBase->graphics_queue_end;
+    gu->command_buffer_cursor = gu->command_buffer_begin;
+
+    gu->shared_ram_begin = memBase->shared_ram_begin;
+    gu->shared_ram_end = memBase->shared_ram_end;
+    gu->graphics_cache_begin = memBase->graphics_cache_begin;
+    gu->graphics_cache_end = memBase->graphics_cache_end;
+
+    gu->error_buffer_begin = gu->error_buffer_cursor = gu->error_buffer_end = NULL;
+
+    gu->memory_begin = memBase->memory_begin;
 
     return TGX_SUCCESS;
 }
@@ -78,6 +95,158 @@ int init_graphics_thread(GraphicsThread* gu){
 void destroy_graphics_thread(GraphicsThread* gu){
 
 }
+
+typedef struct {
+    uint64_t instruction;
+    uint32_t param_buffer_begin;
+    uint32_t param_buffer_end;
+} WideGraphicsInstruction;
+
+void GraphicsTriggerError(GraphicsThread* gu, uint8_t code) {
+    static bool s_WarningDiplayed = false;
+    if (gu->error_buffer_begin == NULL) {
+        if (!s_WarningDiplayed){
+            printf("Warning! Graphics error has been triggered but error have not been configured by the host program.");
+            s_WarningDiplayed = true;
+        }
+        return;
+    }
+    if (gu->error_buffer_cursor >= gu->error_buffer_end) {
+        *(uint8_t*)gu->error_buffer_begin = GPU_ERR_STACK_OVERFLOW;
+        return;
+    }
+    *(uint8_t*)gu->command_buffer_cursor = code;
+    (uint8_t*)gu->command_buffer_cursor++;
+}
+
+void* GraphicsMain(void* arg) {
+    GraphicsThread *gu = arg;
+
+    while (1) {
+        pthread_mutex_lock(&gu->mutex);
+        while (!gu->ready) {
+            pthread_cond_wait(&gu->cond, &gu->mutex);
+        }
+        pthread_mutex_unlock(&gu->mutex);
+
+        WideGraphicsInstruction* buffer = gu->command_buffer_begin;
+        while (buffer < (WideGraphicsInstruction*)gu->graphics_cache_end) {
+            if (buffer->instruction & 0xFFFFFFFF00000000) {
+                break;
+            }
+
+            switch ((buffer->instruction & 0xFFFF000000000000) >> 48) {
+                case 0x0000: break;
+                case 0x0001: {
+                    // initialize host window
+                    if (SDL_Init(SDL_INIT_VIDEO != 0)) {
+                        GraphicsTriggerError(gu, GPU_ERR_INIT);
+                        break;
+                    }
+
+                    uint8_t* param_buffer = gu->memory_begin + buffer->param_buffer_begin;
+
+                    char* title = gu->memory_begin + *(uint32_t*)param_buffer;
+                    param_buffer += sizeof(uint32_t);
+                    uint32_t mode = *(uint32_t*)param_buffer;
+
+                    int32_t width, height;
+                    if (mode & 0x80000000) {
+                        width =  ((int32_t)mode & 0x00FFF000) >> 24;
+                        height = ((int32_t)mode & 0x00000FFF);
+                    }
+                    else {
+                        width = 640;
+                        height = 480;
+                    }
+
+                    gu->context.window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                        width, height, SDL_WINDOW_SHOWN);
+
+                    if (gu->context.window == NULL) {
+                        GraphicsTriggerError(gu, GPU_ERR_NULL_DISPLAY);
+                        break;
+                    }
+
+                    gu->context.appsurf = SDL_GetWindowSurface(gu->context.window);
+                    break;
+                }
+                case 0x0002: {
+                    SDL_DestroyWindow(gu->context.window);
+                    break;
+                }
+                case 0x0003: {
+                    uint8_t *param_buffer = gu->memory_begin + buffer->param_buffer_begin;
+
+                    *(uint8_t*)GLOC_CLEAR_COLOR_RED(gu->graphics_cache_begin) = *param_buffer++;
+                    *(uint8_t*)GLOC_CLEAR_COLOR_GREEN(gu->graphics_cache_begin) = *param_buffer++;
+                    *(uint8_t*)GLOC_CLEAR_COLOR_BLUE(gu->graphics_cache_begin) = *param_buffer++;
+                    break;
+                }
+                case 0x0004: {
+                    if (gu->context.window == NULL) {
+                        GraphicsTriggerError(gu, GPU_ERR_NULL_DISPLAY);
+                        break;
+                    }
+                    SDL_Rect rect = {0};
+                    rect.x = 0;
+                    rect.y = 0;
+                    SDL_GetWindowSize(gu->context.window, &rect.w, &rect.h);
+                    SDL_FillRect(gu->context.appsurf, &rect, SDL_MapRGB(gu->context.appsurf->format,
+                        *(uint8_t*)GLOC_CLEAR_COLOR_RED(gu->graphics_cache_begin),
+                        *(uint8_t*)GLOC_CLEAR_COLOR_GREEN(gu->graphics_cache_begin),
+                        *(uint8_t*)GLOC_CLEAR_COLOR_BLUE(gu->graphics_cache_begin)));
+                    break;
+                }
+                case 0x0005: {
+                    if (gu->context.window == NULL) {
+                        GraphicsTriggerError(gu, GPU_ERR_NULL_DISPLAY);
+                        break;
+                    }
+
+                    SDL_UpdateWindowSurface(gu->context.window);
+                    break;
+                }
+                case 0x0006: {
+                    gu->error_buffer_begin = gu->memory_begin + buffer->param_buffer_begin;
+                    gu->error_buffer_end = gu->memory_begin + buffer->param_buffer_end;
+                    gu->error_buffer_cursor = gu->error_buffer_begin;
+                    break;
+                }
+                case 0x0007: {
+                    uint8_t* result = (uint8_t*)(gu->memory_begin + buffer->param_buffer_begin);
+
+                    SDL_Event event;
+                    while (SDL_PollEvent(&event)) {
+                        switch (event.type) {
+                            default:
+                                break;
+                            case SDL_QUIT:
+                                *result = 1;
+                                break;
+                        }
+                    }
+                    break;
+                }
+            }
+
+            buffer++;
+        }
+
+
+        gu->ready = false;
+    }
+
+    return NULL;
+}
+
+void TriggerGraphics(GraphicsThread* gu) {
+    pthread_mutex_lock(&gu->mutex);
+    gu->ready = true;
+    pthread_cond_signal(&gu->cond);
+    pthread_mutex_unlock(&gu->mutex);
+}
+
 
 #define TGX_CASE(lbl) tgx_##lbl
 #define TGX_ADDR(lbl) &&tgx_##lbl
@@ -149,10 +318,21 @@ static uint64_t ProfilerTimestamp_Start_, ProfilerTimestamp_End_;
 #define MEMACCESS(type, sys, index) *MEMPTR(type, sys, index)
 //#define MEMACCESS(type, sys, index) *(type*)(sys->Memory.program_cache_begin + (index))
 
-#define UPDATE_PF_ZERO_NEG_BITS_I(sys, source, size) CLEAR_BIT(REG32(sys, REG_PF), TGX_PF_Flag_ZeroBit | TGX_PF_Flag_NegBit); \
+//#define UPDATE_PF_ZERO_NEG_BITS_I(sys, source, size) CLEAR_BIT(REG32(sys, REG_PF), TGX_PF_Flag_ZeroBit | TGX_PF_Flag_NegBit); \
+//    REG32(sys, REG_PF) |= GEN_FLAG_IS_ZERO(source) | GEN_FLAG_IS_NEG(source, size)
+//#define UPDATE_PF_ZERO_NEG_BITS_F(sys, source) CLEAR_BIT(REG32(sys, REG_PF), TGX_PF_Flag_ZeroBit | TGX_PF_Flag_NegBit); \
+//    REG32(sys, REG_PF) |= GEN_FLAG_IS_ZERO(source) | GEN_FLAG_IS_NEGF32(source)
+
+#define UPDATE_PF_ZERO_NEG_BITS_I(sys, source, size) /* remove for performance testing*/
+#define UPDATE_PF_ZERO_NEG_BITS_F(sys, source) /* remove for performance testing*/
+
+#define UPDATE_PF_ZERO_NEG_BITS_I_EXP(sys, source, size) CLEAR_BIT(REG32(sys, REG_PF), TGX_PF_Flag_ZeroBit | TGX_PF_Flag_NegBit); \
     REG32(sys, REG_PF) |= GEN_FLAG_IS_ZERO(source) | GEN_FLAG_IS_NEG(source, size)
-#define UPDATE_PF_ZERO_NEG_BITS_F(sys, source) CLEAR_BIT(REG32(sys, REG_PF), TGX_PF_Flag_ZeroBit | TGX_PF_Flag_NegBit); \
+#define UPDATE_PF_ZERO_NEG_BITS_F_EXP(sys, source) CLEAR_BIT(REG32(sys, REG_PF), TGX_PF_Flag_ZeroBit | TGX_PF_Flag_NegBit); \
     REG32(sys, REG_PF) |= GEN_FLAG_IS_ZERO(source) | GEN_FLAG_IS_NEGF32(source)
+
+#define TGX_INTERRUPT(sys, code) REG32(sys, REG_JR) = REG32(sys, REG_IP) + sizeof(Instruction); \
+        REG32(sys, REG_IP) = sys->PU.int_table[code]
 
 #define BRANCHING_INSTRUCTION
 
@@ -240,7 +420,7 @@ int program_thread_exec(TGXContext* sys){
 /* 0x010F */        TGX_ADDR(INITEXR32),         TGX_ADDR(INITEXC32),      TGX_ADDR(INVKEXR32),      TGX_ADDR(INVKEXC32),
 /* 0x0113 */        TGX_ADDR(DEINITEXR32),       TGX_ADDR(DEINITEXC32),    TGX_ADDR(SYSCALLC32),     TGX_ADDR(BREAK),
 /* 0x0117 */        TGX_ADDR(GQPS),              TGX_ADDR(GQS),            TGX_ADDR(GQAI),           TGX_ADDR(GQR),
-/* 0x011B */        TGX_ADDR(GQSI),              TGX_ADDR(GQPC),           TGX_ADDR(GQPF),           TGX_ADDR(MOVRR32),
+/* 0x011B */        TGX_ADDR(GQSI),              TGX_ADDR(GQPC),           TGX_ADDR(GQPF),           TGX_ADDR(GQPE),
     };
 
     uint8_t t8;
@@ -880,7 +1060,7 @@ int program_thread_exec(TGXContext* sys){
     REG32(sys, instruction.params[0]) = memcmp(MEMPTR(void, sys, REG32(sys, instruction.params[1])),
                                 MEMPTR(void, sys, REG32(sys, instruction.ext_params[0])),
                                 (size_t)REG32(sys, instruction.ext_params[1]));
-    UPDATE_PF_ZERO_NEG_BITS_I(sys, REG32(sys, instruction.params[0]), 32);
+    UPDATE_PF_ZERO_NEG_BITS_I_EXP(sys, REG32(sys, instruction.params[0]), 32);
 
     TGX_PROFILE_END(MEMCMP, 0x002D);
     TGX_NEXT_INSTR(*sys);
@@ -2025,7 +2205,7 @@ int program_thread_exec(TGXContext* sys){
     TGX_PROFILE_CALL(CMPR32_R32, 0x0089);
 
     ti64 = (int32_t)REG32(sys, instruction.params[1]) - (int32_t)REG32(sys, instruction.params[0]);
-    UPDATE_PF_ZERO_NEG_BITS_I(sys, ti64, 64);
+    UPDATE_PF_ZERO_NEG_BITS_I_EXP(sys, ti64, 64);
 
     TGX_PROFILE_END(CMPR32_R32, 0x0089);
     TGX_NEXT_INSTR(*sys);
@@ -2037,7 +2217,7 @@ int program_thread_exec(TGXContext* sys){
     TGX_PROFILE_CALL(CMPR8_R8, 0x008A);
 
     ti64 = (int8_t)REG8(sys, instruction.params[1]) - (int8_t)REG8(sys, instruction.params[0]);
-    UPDATE_PF_ZERO_NEG_BITS_I(sys, ti64, 64);
+    UPDATE_PF_ZERO_NEG_BITS_I_EXP(sys, ti64, 64);
 
     TGX_PROFILE_END(CMPR8_R8, 0x008A);
     TGX_NEXT_INSTR(*sys);
@@ -2049,7 +2229,7 @@ int program_thread_exec(TGXContext* sys){
     TGX_PROFILE_CALL(CMPR16_R16, 0x008B);
 
     ti64 = (int16_t)REG16(sys, instruction.params[1]) - (int16_t)REG16(sys, instruction.params[0]);
-    UPDATE_PF_ZERO_NEG_BITS_I(sys, ti64, 64);
+    UPDATE_PF_ZERO_NEG_BITS_I_EXP(sys, ti64, 64);
 
     TGX_PROFILE_END(CMPR16_R16, 0x008B);
     TGX_NEXT_INSTR(*sys);
@@ -2061,7 +2241,7 @@ int program_thread_exec(TGXContext* sys){
     TGX_PROFILE_CALL(CMPR64_R64, 0x008C);
 
     ti64 = (int64_t)REG64(sys, instruction.params[1]) - (int64_t)REG64(sys, instruction.params[0]);
-    UPDATE_PF_ZERO_NEG_BITS_I(sys, ti64, 64);
+    UPDATE_PF_ZERO_NEG_BITS_I_EXP(sys, ti64, 64);
 
     TGX_PROFILE_END(CMPR64_R64, 0x008C);
     TGX_NEXT_INSTR(*sys);
@@ -2073,7 +2253,7 @@ int program_thread_exec(TGXContext* sys){
     TGX_PROFILE_CALL(CMPR32_C32, 0x008D);
 
     ti64 = (int32_t)instruction.const_i32 - (int32_t)REG32(sys, instruction.params[0]);
-    UPDATE_PF_ZERO_NEG_BITS_I(sys, ti64, 64);
+    UPDATE_PF_ZERO_NEG_BITS_I_EXP(sys, ti64, 64);
 
     TGX_PROFILE_END(CMPR32_C32, 0x008D);
     TGX_NEXT_INSTR(*sys);
@@ -2085,7 +2265,7 @@ int program_thread_exec(TGXContext* sys){
     TGX_PROFILE_CALL(CMPR8_C8, 0x008E);
 
     ti64 = (int64_t)((int8_t)instruction.ext_params[0] - (int8_t)REG8(sys, instruction.params[0]));
-    UPDATE_PF_ZERO_NEG_BITS_I(sys, ti64, 64);
+    UPDATE_PF_ZERO_NEG_BITS_I_EXP(sys, ti64, 64);
 
     TGX_PROFILE_END(CMPR8_C8, 0x008E);
     TGX_NEXT_INSTR(*sys);
@@ -2097,7 +2277,7 @@ int program_thread_exec(TGXContext* sys){
     TGX_PROFILE_CALL(CMPR16_C16, 0x008F);
 
     ti64 = (int16_t)instruction.ext_params16[0] - (int16_t)REG16(sys, instruction.params[0]);
-    UPDATE_PF_ZERO_NEG_BITS_I(sys, ti64, 64);
+    UPDATE_PF_ZERO_NEG_BITS_I_EXP(sys, ti64, 64);
 
     TGX_PROFILE_END(CMPR16_C16, 0x008F);
     TGX_NEXT_INSTR(*sys);
@@ -2109,7 +2289,7 @@ int program_thread_exec(TGXContext* sys){
     TGX_PROFILE_CALL(CMPR64_C40, 0x0090);
 
     ti64 = (int64_t)CONST40(instruction) - (int64_t)REG64(sys, instruction.params[0]);
-    UPDATE_PF_ZERO_NEG_BITS_I(sys, ti64, 64);
+    UPDATE_PF_ZERO_NEG_BITS_I_EXP(sys, ti64, 64);
 
     TGX_PROFILE_END(CMPR64_C40, 0x0090);
     TGX_NEXT_INSTR(*sys);
@@ -2727,7 +2907,7 @@ int program_thread_exec(TGXContext* sys){
     TGX_PROFILE_CALL(CMPF32, 0x00C4);
 
     tf32 = REGF32(sys, instruction.params[1]) - REGF32(sys, instruction.params[0]);
-    UPDATE_PF_ZERO_NEG_BITS_F(sys, tf32);
+    UPDATE_PF_ZERO_NEG_BITS_F_EXP(sys, tf32);
 
     TGX_PROFILE_END(CMPF32, 0x00C4);
     TGX_NEXT_INSTR(*sys);
@@ -2739,7 +2919,7 @@ int program_thread_exec(TGXContext* sys){
     TGX_PROFILE_CALL(CMPFC32, 0x00C5);
 
     tf32 = instruction.const_f32 - REGF32(sys, instruction.params[0]);
-    UPDATE_PF_ZERO_NEG_BITS_F(sys, tf32);
+    UPDATE_PF_ZERO_NEG_BITS_F_EXP(sys, tf32);
 
     TGX_PROFILE_END(CMPFC32, 0x00C5);
     TGX_NEXT_INSTR(*sys);
@@ -3787,7 +3967,12 @@ int program_thread_exec(TGXContext* sys){
 
     TGX_CASE(GQPS):
     TGX_PROFILE_CALL(GQPS, 0x0117);
-//#error "Not Implemented"
+
+    CLEAR_BIT(REG32(sys, REG_PF), (TGX_PF_Flag_GraphicsFree | TGX_PF_Flag_ZeroBit | TGX_PF_Flag_NegBit));
+    // if gu.ready is false it means it's in an active state. If it's true it means it has become inactive
+    // we want to be able to do work if the GU is inactive
+    REG32(sys, REG_PF) |= (TGX_PF_Flag_GraphicsFree | TGX_PF_Flag_ZeroBit) * (!sys->GU.ready);
+
     TGX_PROFILE_END(GQPS, 0x0117);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
@@ -3796,7 +3981,9 @@ int program_thread_exec(TGXContext* sys){
 
     TGX_CASE(GQS):
     TGX_PROFILE_CALL(GQS, 0x0118);
-//#error "Not Implemented"
+
+    TriggerGraphics(&sys->GU);
+
     TGX_PROFILE_END(GQS, 0x0118);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
@@ -3805,7 +3992,17 @@ int program_thread_exec(TGXContext* sys){
 
     TGX_CASE(GQAI):
     TGX_PROFILE_CALL(GQAI, 0x0119);
-//#error "Not Implemented"
+    BRANCHING_INSTRUCTION
+
+    if (sys->GU.command_buffer_cursor + 2 * sizeof(uint64_t) >= sys->GU.command_buffer_end) {
+        TGX_INTERRUPT(sys, INT_RES_GQ_FULL);
+        TGX_PROFILE_END(GQAI, 0x0119);
+        TGX_DISPATCH(_jTable, instruction, *sys);
+    }
+
+    *(((uint64_t*)sys->GU.command_buffer_cursor) + 0)= REG64(sys, 0);
+    *(((uint64_t*)sys->GU.command_buffer_cursor) + 1) = REG64(sys, 1);
+
     TGX_PROFILE_END(GQAI, 0x0119);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
@@ -3814,7 +4011,10 @@ int program_thread_exec(TGXContext* sys){
 
     TGX_CASE(GQR):
     TGX_PROFILE_CALL(GQR, 0x011A);
-//#error "Not Implemented"
+
+    memset(sys->GU.command_buffer_begin, 0, GRAPHICS_QUEUE_SIZE);
+    sys->GU.command_buffer_cursor = sys->GU.command_buffer_begin;
+
     TGX_PROFILE_END(GQR, 0x011A);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
@@ -3823,7 +4023,15 @@ int program_thread_exec(TGXContext* sys){
 
     TGX_CASE(GQSI):
     TGX_PROFILE_CALL(GQSI, 0x011B);
-//#error "Not Implemented"
+
+    t32 = REG32(sys, instruction.params[1]) - REG32(sys, instruction.params[0]);
+    if (sys->GU.command_buffer_cursor + t32 > sys->GU.command_buffer_end) {
+        TGX_INTERRUPT(sys, INT_RES_GQ_OVERFLOW);
+        TGX_PROFILE_END(GQSI, 0x011B);
+        TGX_DISPATCH(_jTable, instruction, *sys);
+    }
+    memcpy(sys->GU.command_buffer_cursor, MEMPTR(void, sys, REG32(sys, instruction.params[0])), t32);
+
     TGX_PROFILE_END(GQSI, 0x011B);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
@@ -3832,7 +4040,10 @@ int program_thread_exec(TGXContext* sys){
 
     TGX_CASE(GQPC):
     TGX_PROFILE_CALL(GQPC, 0x011C);
-//#error "Not Implemented"
+
+    REG32(sys, REG_RA) = (uint32_t)(sys->GU.command_buffer_cursor - sys->GU.command_buffer_begin);
+    UPDATE_PF_ZERO_NEG_BITS_I_EXP(sys, REG32(sys, REG_RA), 32);
+
     TGX_PROFILE_END(GQPC, 0x011C);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
@@ -3841,19 +4052,30 @@ int program_thread_exec(TGXContext* sys){
 
     TGX_CASE(GQPF):
     TGX_PROFILE_CALL(GQPF, 0x011D);
-//#error "Not Implemented"
+
+    REG32(sys, REG_RA) = (uint32_t)(sys->GU.command_buffer_end - sys->GU.command_buffer_cursor);
+    UPDATE_PF_ZERO_NEG_BITS_I_EXP(sys, REG32(sys, REG_RA), 32);
+
     TGX_PROFILE_END(GQPF, 0x011D);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(MOVRR32):
-    TGX_PROFILE_CALL(MOVRR32, 0x011E);
+    TGX_CASE(GQPE):
+    TGX_PROFILE_CALL(GQPE, 0x011E);
+    BRANCHING_INSTRUCTION
 
-    REG32(sys, instruction.params[0]) = REG32(sys, instruction.params[1]);
+    if (sys->GU.error_buffer_begin != NULL && sys->GU.error_buffer_cursor > sys->GU.error_buffer_begin) {
+        REG8(sys, REG_RA) = *(uint8_t*)sys->GU.error_buffer_cursor;
+        (uint8_t*)sys->GU.error_buffer_cursor--;
+    }
+    else {
+        REG8(sys, REG_RA) = 0;
+    }
+    UPDATE_PF_ZERO_NEG_BITS_I_EXP(sys, REG8(sys, REG_RA), 8);
 
-    TGX_PROFILE_END(MOVRR32, 0x011E);
+    TGX_PROFILE_END(GQPE, 0x011E);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 

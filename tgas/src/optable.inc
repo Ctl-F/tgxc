@@ -618,6 +618,38 @@ static std::unordered_map<uint32_t, TableEntry> break_ParamTable {
     { 0x000B, TableEntry{ 0x0116, EncodeBreak } }, /* Imm */
 };
 
+static std::unordered_map<uint32_t, TableEntry> gqps_ParamTable {
+    { 0x0000, TableEntry{ 0x0117, nullptr } }, /*  */
+};
+
+static std::unordered_map<uint32_t, TableEntry> gqs_ParamTable {
+    { 0x0000, TableEntry{ 0x0118, nullptr } }, /*  */
+};
+
+static std::unordered_map<uint32_t, TableEntry> gqai_ParamTable {
+    { 0x0000, TableEntry{ 0x0119, nullptr } }, /*  */
+};
+
+static std::unordered_map<uint32_t, TableEntry> gqr_ParamTable {
+    { 0x0000, TableEntry{ 0x011A, nullptr } }, /*  */
+};
+
+static std::unordered_map<uint32_t, TableEntry> gqsi_ParamTable {
+    { 0x0011, TableEntry{ 0x011B, nullptr } }, /* R32, R32 */
+};
+
+static std::unordered_map<uint32_t, TableEntry> gqpc_ParamTable {
+    { 0x0000, TableEntry{ 0x011C, nullptr } }, /*  */
+};
+
+static std::unordered_map<uint32_t, TableEntry> gqpf_ParamTable {
+    { 0x0000, TableEntry{ 0x011D, nullptr } }, /*  */
+};
+
+static std::unordered_map<uint32_t, TableEntry> gqpe_ParamTable {
+    { 0x0000, TableEntry{ 0x011E, nullptr } }, /*  */
+};
+
 static std::unordered_map<std::string, std::unordered_map<uint32_t, TableEntry>*> TableMap {
  { "nop", &nop_ParamTable },
  { "mov", &mov_ParamTable },
@@ -693,6 +725,14 @@ static std::unordered_map<std::string, std::unordered_map<uint32_t, TableEntry>*
  { "int", &int_ParamTable },
  { "syscall", &syscall_ParamTable },
  { "break", &break_ParamTable },
+ { "gqps", &gqps_ParamTable },
+ { "gqs", &gqs_ParamTable },
+ { "gqai", &gqai_ParamTable },
+ { "gqr", &gqr_ParamTable },
+ { "gqsi", &gqsi_ParamTable },
+ { "gqpc", &gqpc_ParamTable },
+ { "gqpf", &gqpf_ParamTable },
+ { "gqpe", &gqpe_ParamTable },
 };
 
 #endif //INCLUDE_DATA_TABLE

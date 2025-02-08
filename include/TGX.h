@@ -30,6 +30,13 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <pthread.h>
+
+#ifdef __cplusplus
+#include <atomic>
+#else
+#include <stdatomic.h>
+#endif
 
 #define TGX_ENUM int
 
@@ -106,6 +113,11 @@
 #define REGVEC4_COUNT 0x04
 
 #define INT_TABLE_COUNT 256
+
+#define INT_RES_UNEXPECTED_ERROR 255
+#define INT_RES_GQ_FULL          254
+#define INT_RES_GQ_OVERFLOW      253
+
 
 #define KILOBYTES(n) ((n) * 1024)
 
@@ -207,7 +219,36 @@ typedef struct {
 } ProgramThread;
 
 typedef struct {
+	SDL_Window* window;
+	SDL_Surface* appsurf;
+} GraphicsContext;
 
+#define GPU_ERR_NONE 0x00
+#define GPU_ERR_INIT 0x01
+#define GPU_ERR_NULL_DISPLAY 0x02
+#define GPU_ERR_STACK_OVERFLOW 0x03
+
+typedef struct {
+	pthread_mutex_t mutex;
+	pthread_cond_t cond;
+	GraphicsContext context;
+	pthread_t thread;
+	void* command_buffer_begin;
+	void* command_buffer_end;
+	void* command_buffer_cursor;
+	void* shared_ram_begin;
+	void* shared_ram_end;
+	void* graphics_cache_begin;
+	void* graphics_cache_end;
+	void* error_buffer_begin;
+	void* error_buffer_end;
+	void* error_buffer_cursor;
+	void* memory_begin;
+#ifdef __cplusplus
+	std::atomic<bool> ready;
+#else
+	_Atomic bool ready; // active == !ready
+#endif
 } GraphicsThread;
 
 typedef uint32_t(*TGX_swi_handler)(void* tgxContext, uint32_t code);
@@ -241,7 +282,7 @@ typedef struct {
 
 int init_program_thread(ProgramThread*);
 void destroy_program_thread(ProgramThread*);
-int init_graphics_thread(GraphicsThread*);
+int init_graphics_thread(GraphicsThread*, PrincipleMemory* memBase);
 void destroy_graphics_thread(GraphicsThread*);
 
 int program_thread_exec(TGXContext*);

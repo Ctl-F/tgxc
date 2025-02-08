@@ -13,7 +13,7 @@ int execute(TGXContext *context) {
     }
 
     init_program_thread(&context->PU);
-    init_graphics_thread(&context->GU);
+    init_graphics_thread(&context->GU, &context->Memory);
 
     if (load_rom(context) != TGX_SUCCESS) {
         return 1;
@@ -26,7 +26,17 @@ int execute(TGXContext *context) {
 }
 
 int main(void) {
-    TGXContext context = {0};
+    TGXContext context = {
+        .PU = {0},
+        .GU = {
+            .mutex = PTHREAD_MUTEX_INITIALIZER,
+            .cond = PTHREAD_COND_INITIALIZER,
+            .context = {0},
+        },
+        .Memory = {0},
+        .SWIFunc = {0},
+        .ExitCode = TGX_EXIT_CODE_NONE,
+    };
 
     do {
         if (execute(&context) != 0) {

@@ -6,10 +6,12 @@ find_package(SDL2 REQUIRED)
 include_directories(tgxc PUBLIC ${SDL2_INCLUDE_DIRS} include)
 
 set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 
 add_executable(tgxc src/main.c
         include/TGX.h
-        src/TGX.c)
+        src/TGX.c
+        include/graphics_cache_map.h)
 
 if(CMAKE_BUILD_TYPE MATCHES DEBUG)
 
