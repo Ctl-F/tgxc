@@ -467,31 +467,27 @@ does.
 0x00F6 0x0F Jle Const32
 
 
-0x00F7 0x10 //NOP: Will determine better fast_register api later. - cmp fast_a, fast_b
-0x00F8 0x11 //NOP: Will determine better fast_register api later. - inc fast_a
+0x00F7 mov [reg32]+reg32, reg8
+0x00F8 mov [reg32]+reg32, reg16
+0x00F9 mov [reg32]+reg32, reg32
+0x00FA mov [reg32]+reg32, reg64
+0x00FB mov [reg32]+reg32, regf32
+0x00FC mov reg8, [reg32]+reg32
+0x00FD mov reg16, [reg32]+reg32
+0x00FE mov reg32, [reg32]+reg32
+0x00FF mov reg64, [reg32]+reg32
+0x0100 mov regf32, [reg32]+reg32
 
-0x00F9 0x12 //NOP: Will determine better fast_register api later. - mov fast_a, Reg32
-0x00FA 0x13 //NOP: Will determine better fast_register api later. - mov fast_b, Reg32
-
-0x00FB 0x14 //NOP: Will determine better fast_register api later. - mov fast_a, fast_b
-0x00FC 0x15 //NOP: Will determine better fast_register api later. - mov fast_a, fast_c
-0x00FD 0x16 //NOP: Will determine better fast_register api later. - mov fast_b, fast_a
-0x00FE 0x17 //NOP: Will determine better fast_register api later. - mov fast_b, fast_c
-
-0x00FF 0x18 //NOP: Will determine better fast_register api later. - mov fast_c, fast_a
-0x0100 0x19 //NOP: Will determine better fast_register api later. - mov fast_c, fast_b
-0x0101 0x1A //NOP: Will determine better fast_register api later. - mov Reg32, fast_a
-0x0102 0x1B //NOP: Will determine better fast_register api later. - mov Reg32, fast_b
-
-0x0103 0x1C //NOP: Will determine better fast_register api later. - fast_a = fast_b + fast_c
-0x0104 0x1D //NOP: Will determine better fast_register api later. - fast_a = fast_b - fast_c
-0x0105 0x1E //NOP: Will determine better fast_register api later. - fast_a = fast_b * fast_c
-0x0106 0x1F //NOP: Will determine better fast_register api later. - fast_a = fast_b / fast_c
-
-0x0107 0x20 //NOP: Will determine better fast_register api later. - fast_a = fast_b & fast_c
-0x0108 0x21 //NOP: Will determine better fast_register api later. - fast_a = fast_b | fast_c
-0x0109 0x22 //NOP: Will determine better fast_register api later. - fast_a = fast_b & fast_c
-0x010A 0x23 //NOP: Will determine better fast_register api later. - fast_a = ~fast_b
+0x0101 mov [reg32]-reg32,   reg8
+0x0102 mov [reg32]-reg32,  reg16
+0x0103 mov [reg32]-reg32,  reg32
+0x0104 mov [reg32]-reg32,  reg64
+0x0105 mov [reg32]-reg32, regf32
+0x0106 mov reg8,   [reg32]-reg32
+0x0107 mov reg16,  [reg32]-reg32
+0x0108 mov reg32,  [reg32]-reg32
+0x0109 mov reg64,  [reg32]-reg32
+0x010A mov regf32, [reg32]-reg32
 
 0x010B 0x24 Ret
 0x010C 0x25 Hlt

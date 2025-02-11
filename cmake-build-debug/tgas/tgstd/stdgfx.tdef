@@ -1,0 +1,70 @@
+#ifndef STDGFX_
+#define STDGFX_
+
+
+#define GFX_COMMAND_ID_NOP     0x00000000
+#define GFX_COMMAND_ID_WININIT 0x00000001
+#define GFX_COMMAND_ID_WINFREE 0x00000002
+#define GFX_COMMAND_ID_SETCLRC 0x00000003
+#define GFX_COMMAND_ID_CLEAR   0x00000004
+#define GFX_COMMAND_ID_PRESENT 0x00000005
+
+#define GFX_COMMAND_ID_EOF     0xFFFFFFFF
+
+#define ____PP_CAT_(a, b) a ## b
+#define ____PP_CAT_EXP(a, b) ____PP_CAT_(a, b)
+
+
+#define __SETCMDID__(id) \
+    mov ra, id; |\
+    mov m0h, ra;
+
+#define GFX_RECORD_INIT_WINDOW(pWindowInitParams) \
+    __SETCMDID__(GFX_COMMAND_ID_WININIT) |\
+    mov ra, pWindowInitParams; |\
+    mov m1l, ra; |\
+    gqai;
+
+#define GFX_RECORD_FREE_WINDOW() \
+    __SETCMDID__(GFX_COMMAND_ID_WINFREE) |\
+    gqai;
+
+#define GFX_RECORD_SET_CLEAR_COLOR(pColorRGB) \
+    __SETCMDID__(GFX_COMMAND_ID_SETCLRC) |\
+    mov ra, pColorRGB; |\
+    mov m1l, ra; |\
+    gqai;
+
+#define GFX_RECORD_CLEAR() \
+    __SETCMDID__(GFX_COMMAND_ID_CLEAR) |\
+    gqai;
+
+#define GFX_RECORD_PRESENT() \
+    __SETCMDID__(GFX_COMMAND_ID_PRESENT) |\
+    gqai;
+
+#define GFX_RECORD_EOF() \
+    __SETCMDID__(GFX_COMMAND_ID_EOF) |\
+    gqai;
+
+
+
+#define GFX_AWAIT_GPU() \
+____PP_CAT_EXP(__SYNC_LOOP_GFX_AWAIT__, __LINE__): |\
+    gqps; |\
+    jnz ____PP_CAT_EXP(__SYNC_LOOP_GFX_AWAIT__, __LINE__)
+
+$section meta
+
+@struct gWindowInitParams {
+    i32 pWindowTitle;
+    i32 pWindowSize;
+}
+
+@struct gColorRGB {
+    i8 r;
+    i8 g;
+    i8 b;
+}
+
+#endif

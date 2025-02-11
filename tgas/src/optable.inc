@@ -156,6 +156,26 @@ static std::unordered_map<uint32_t, TableEntry> mov_ParamTable {
     { 0x091B, TableEntry{ 0x0007, HandleMovToTblC8 } }, /* Table, R32, Imm */
     { 0x0AAB, TableEntry{ 0x0023, nullptr } }, /* DeR32, DeR32, Imm */
     { 0x0ACB, TableEntry{ 0x0006, nullptr } }, /* DeR32, Size8, Imm */
+    { 0x1AC1, TableEntry{ 0x00FE, nullptr } }, /* R32, DeR32, Size8, R32 */
+    { 0x1AD1, TableEntry{ 0x0108, nullptr } }, /* R32, DeR32, Size16, R32 */
+    { 0x2AC1, TableEntry{ 0x00FD, nullptr } }, /* R16, DeR32, Size8, R32 */
+    { 0x2AD1, TableEntry{ 0x0107, nullptr } }, /* R16, DeR32, Size16, R32 */
+    { 0x3AC1, TableEntry{ 0x00FC, nullptr } }, /* R8, DeR32, Size8, R32 */
+    { 0x3AD1, TableEntry{ 0x0106, nullptr } }, /* R8, DeR32, Size16, R32 */
+    { 0x4AC1, TableEntry{ 0x00FF, nullptr } }, /* R64, DeR32, Size8, R32 */
+    { 0x4AD1, TableEntry{ 0x0109, nullptr } }, /* R64, DeR32, Size16, R32 */
+    { 0x7AC1, TableEntry{ 0x0100, nullptr } }, /* F32, DeR32, Size8, R32 */
+    { 0x7AD1, TableEntry{ 0x010A, nullptr } }, /* F32, DeR32, Size16, R32 */
+    { 0xAC11, TableEntry{ 0x00F9, nullptr } }, /* DeR32, Size8, R32, R32 */
+    { 0xAC12, TableEntry{ 0x00F8, nullptr } }, /* DeR32, Size8, R32, R16 */
+    { 0xAC13, TableEntry{ 0x00F7, nullptr } }, /* DeR32, Size8, R32, R8 */
+    { 0xAC14, TableEntry{ 0x00FA, nullptr } }, /* DeR32, Size8, R32, R64 */
+    { 0xAC17, TableEntry{ 0x00FB, nullptr } }, /* DeR32, Size8, R32, F32 */
+    { 0xAD11, TableEntry{ 0x0103, nullptr } }, /* DeR32, Size16, R32, R32 */
+    { 0xAD12, TableEntry{ 0x0102, nullptr } }, /* DeR32, Size16, R32, R16 */
+    { 0xAD13, TableEntry{ 0x0101, nullptr } }, /* DeR32, Size16, R32, R8 */
+    { 0xAD14, TableEntry{ 0x0104, nullptr } }, /* DeR32, Size16, R32, R64 */
+    { 0xAD17, TableEntry{ 0x0105, nullptr } }, /* DeR32, Size16, R32, F32 */
 };
 
 static std::unordered_map<uint32_t, TableEntry> movc_ParamTable {

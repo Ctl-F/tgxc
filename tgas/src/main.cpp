@@ -77,6 +77,33 @@ struct RegisterInfo {
     int emitID;
 };
 
+struct StructDef {
+    std::vector<std::string> paramNames;
+    std::vector<int> widths;
+
+    [[nodiscard]] size_t get_size() const {
+        size_t size = 0;
+        for (int width : widths) {
+            size += width;
+        }
+        return size;
+    }
+
+    [[nodiscard]] size_t offset_of(const std::string& str) const {
+        size_t size = 0;
+        bool found = false;
+        for (size_t i=0; i<paramNames.size(); i++) {
+            if (paramNames[i] == str) {
+                found = true;
+                break;
+            }
+            size += widths[i];
+        }
+        if (!found) return -1;
+        return size;
+    }
+};
+
 struct CompilerContext {
     const char* input;
     std::vector<Instruction> program_section;
@@ -87,6 +114,7 @@ struct CompilerContext {
     std::vector<std::pair<uint32_t, std::string>> unlinked_program_labels;
     std::vector<uint32_t> instructions_to_relink;
     CodeSection section = CodeSection::Meta;
+    std::unordered_map<std::string, StructDef> structs;
 };
 
 static RegisterInfo s_RegisterTable[static_cast<size_t>(RegisterID::REGCOUNT)] {
@@ -596,10 +624,18 @@ void consume_ignore_whitespace_and_comments(CompilerContext& ctx) {
 }
 
 uint32_t get_param_type(CompilerContext& ctx, string_view view, NumberLiteral& literal) {
-    if (streq(view.begin, "i8", 2)) {
+    // we are spoofing + and - as size8 and size16 respectively so that we don't have to do a major refactor
+    // in our parameter ids, either expanding the mask size which would make the parameter type not fit nicely into
+    // any integer size. Or adding a bunch of parsing handlers to actually detect WHICH size we have directly from
+    // the optable handlers. The second method is the proper way to do it, but for now, we'll emit a size8 and size16 if
+    // we hit a plus or minus and that'll let us directly map the correct instructions in the optable spec without having
+    // to do a huge refactor. That does mean that if a user writes "mov [ra] i8 rb, rc" and it'll be interpreted as
+    // "mov [ra]+rb, rc" instead of throwing an error. But this is a small enough case that I don't think it should make
+    // too much of a difference. We can always refactor this properly later on
+    if (streq(view.begin, "i8", 2) || streq(view.begin, "+", 1)) {
         return PARAM_TYPE_Size8;
     }
-    if (streq(view.begin, "i16", 3)) {
+    if (streq(view.begin, "i16", 3) || streq(view.begin, "-", 1)) {
         return PARAM_TYPE_Size16;
     }
     if (streq(view.begin, "i32", 3)) {
@@ -667,18 +703,44 @@ uint32_t get_param_type(CompilerContext& ctx, string_view view, NumberLiteral& l
         return PARAM_TYPE_Imm;
     }
 
-    //double check these label values
-    /*if (auto wh = ctx.program_labels.find(str); wh != ctx.program_labels.end()) {
-        literal.uint_val = wh->second * sizeof(Instruction);
-        return PARAM_TYPE_Imm;
+    if (streq(str.c_str(), "offsetof[", 9) && *str.rbegin() == ']') {
+        const char* p = str.c_str() + 9;
+        std::optional<string_view> struct_name = parse_identifier(p);
+        if (!struct_name.has_value()) {
+            throw std::runtime_error("Expected struct name within offsetof");
+        }
+        p = struct_name.value().end;
+        if (*p != ':') {
+            throw std::runtime_error("Expected ':' after struct name within offsetof");
+        }
+        p++;
+        std::optional<string_view> param_name = parse_identifier(p);
+        if (!param_name.has_value()) {
+            throw std::runtime_error("Expected member name within offsetof");
+        }
+        p = param_name.value().end;
+        if (*p != ']') {
+           throw std::runtime_error("Expected ']' to close offsetof");
+        }
+
+        std::string struct_name_{struct_name.value().begin, struct_name.value().end};
+
+        if (auto s = ctx.structs.find(struct_name_); s != ctx.structs.end()) {
+            size_t offset = s->second.offset_of(std::string(param_name.value().begin, param_name.value().end));
+
+            if (offset == -1) {
+                throw std::runtime_error("Member not found in struct " + struct_name_ + ": " + std::string{param_name.value().begin, param_name.value().end});
+            }
+
+            literal.is_float = false;
+            literal.uint_val = offset;
+            return PARAM_TYPE_Imm;
+        }
+
+        throw std::runtime_error("struct " + struct_name_ + " is not defined");
     }
 
-    if (auto wh = ctx.data_labels.find(str); wh != ctx.data_labels.end()) {
-        literal.uint_val = wh->second ;
-        return PARAM_TYPE_Imm;
-    }*/
-
-    ctx.unlinked_program_labels.push_back(std::make_pair(ctx.program_section.size() - 1, str));
+    ctx.unlinked_program_labels.emplace_back(ctx.program_section.size() - 1, str);
     literal.uint_val = 0;
     return PARAM_TYPE_Imm;
 }
@@ -695,17 +757,22 @@ uint32_t parse_param_ids(CompilerContext& ctx, Instruction& instr, std::vector<s
         }
         string_view param{ptr, ptr};
         char ch = *param.end;
-        while (ch && ch != ',' && ch != '\n' && ch != ' ' && ch != '\t' && ch != '\r' && ch != ';') {
+        while (ch && ch != ',' && ch != '\n' && ch != ' ' && ch != '\t' && ch != '\r' && ch != ';' && ch != '+' && ch != '-') {
             ch = *(param.end++);
         }
         param.end--;
 
+        if ((*param.begin == '+' || *param.begin == '-') && param.end <= param.begin) {
+            param.end += 2;
+        }
         std::string debug_str{param.begin, param.end};
 
         params.push_back(param);
         NumberLiteral immediate{};
         uint32_t ptype = get_param_type(ctx, param, immediate);
         paramid = (paramid << PARAM_MASK_WIDTH) | ptype;
+
+        bool needs_comma = true;
 
         switch (ptype) {
             case PARAM_TYPE_None:
@@ -714,6 +781,7 @@ uint32_t parse_param_ids(CompilerContext& ctx, Instruction& instr, std::vector<s
             case PARAM_TYPE_Size32:
             case PARAM_TYPE_Size64:
             case PARAM_TYPE_Table:
+                needs_comma = false;
                 break;
             case PARAM_TYPE_R32:
             case PARAM_TYPE_R8:
@@ -753,11 +821,13 @@ uint32_t parse_param_ids(CompilerContext& ctx, Instruction& instr, std::vector<s
         }
 
         ptr = param.end;
-        if (*ptr != ',') {
+        if (*ptr != ',' && *ptr != '+' && *ptr != '-' && needs_comma) {
             ctx.input = ptr;
             return paramid;
         }
-        ptr++;
+        if (*ptr != '+' && *ptr != '-') {
+            ptr += needs_comma;
+        }
     } while (true);
 }
 
@@ -826,6 +896,81 @@ bool parse_label_export(CompilerContext& ctx) {
     }
 
     return false;
+}
+
+bool parse_struct_def(CompilerContext& ctx) {
+    const char* ptr = ctx.input;
+    if (!streq(ptr, "@struct", 7)) {
+        return false;
+    }
+    ptr += 7;
+    consume_whitespace(ptr);
+
+    std::optional<string_view> name = parse_identifier(ptr);
+    if (!name.has_value()) {
+        throw std::runtime_error("Expected struct name.");
+    }
+    ptr = name.value().end;
+    consume_whitespace(ptr);
+
+    if (!(*ptr) || *ptr != '{') {
+        throw std::runtime_error("Expected '{' after struct name.");
+    }
+    ptr++;
+
+    StructDef def;
+
+    do {
+        consume_whitespace(ptr);
+
+        if (!(*ptr) || *ptr == '}') {
+            ptr += *ptr == '}';
+            break;
+        }
+
+        std::optional<string_view> size = parse_identifier(ptr);
+        if (!size.has_value()) {
+            throw std::runtime_error("Expected type size in struct def.");
+        }
+        ptr = size.value().end;
+        consume_whitespace(ptr);
+
+        int w = 0;
+        const char* sz = size.value().begin;
+
+        if (streq(sz, "i8", 2)) {
+            w = 1;
+        }
+        else if (streq(sz, "i16", 3)) {
+            w = 2;
+        }
+        else if (streq(sz, "i32", 3) || streq(sz, "f32", 3)) {
+            w = 4;
+        }
+        else if (streq(sz, "i64", 3)) {
+            w = 8;
+        }
+        else {
+            throw std::runtime_error("Invalid type specifier in struct def: " + std::string{ size.value().begin, size.value().end });
+        }
+
+        std::optional<string_view> pname = parse_identifier(ptr);
+        if (!pname.has_value()) {
+            throw std::runtime_error("Expected name after type in struct def.");
+        }
+        ptr = pname.value().end;
+
+        def.paramNames.emplace_back(pname.value().begin, pname.value().end);
+        def.widths.push_back(w);
+
+        consume_whitespace(ptr);
+        consume_comment(ptr);
+    }
+    while (true);
+
+    ctx.input = ptr;
+    ctx.structs.insert({std::string{name.value().begin, name.value().end}, def});
+    return true;
 }
 
 bool parse_section(CompilerContext& ctx){
@@ -918,16 +1063,28 @@ bool compile_program_section(CompilerContext& ctx){
             continue;
         }
 
+        const char* what = nullptr;
+        std::string loc = get_error_location();
+
         try {
             if(read_and_emit_instruction(ctx)){
                 continue;
             }
         }
-        catch (std::runtime_error const&) {
-
+        catch (std::runtime_error const& error) {
+            what = error.what();
         }
 
-        return compile_section(ctx);
+        if (compile_section(ctx)) {
+            return true;
+        }
+        if (what != nullptr) {
+            std::cerr << loc << what << "\n";
+        }
+        else {
+            std::cerr << "Unexpected error: " << loc << "\n";
+        }
+        return false;
     } while(true);
 
 }
@@ -1002,7 +1159,7 @@ bool compile_data_section(CompilerContext& ctx){
         }
 
         uint32_t size = 0;
-        //bool fp = false;
+        bool isStruct = false;
 
         string_view dec = declarator.value();
 
@@ -1022,6 +1179,26 @@ bool compile_data_section(CompilerContext& ctx){
         else if(streq(dec.begin, "i64", 3)){
             size = 8;
         }
+        else if (streq(dec.begin, "struct", 6)) {
+            const char* ptr = dec.end;
+            consume_whitespace(ptr);
+            std::optional<string_view> sname = parse_identifier(ptr);
+
+            if (!sname.has_value()) {
+                throw std::runtime_error("Expected struct name in data section.");
+            }
+            string_view nm = sname.value();
+            std::string struct_name {nm.begin, nm.end};
+
+            if (auto f = ctx.structs.find(struct_name); f != ctx.structs.end()) {
+                size = f->second.get_size();
+                ctx.input = nm.end;
+            }
+            else {
+                throw std::runtime_error("struct " + struct_name + " is not defined.");
+            }
+            isStruct = true;
+        }
         else if(streq(dec.begin, "str", 3)){
             ctx.input = dec.end;
             if(!export_str(ctx)){
@@ -1036,7 +1213,9 @@ bool compile_data_section(CompilerContext& ctx){
             return false;
         }
 
-        ctx.input = dec.end;
+        if (!isStruct) {
+            ctx.input = dec.end;
+        }
         consume_whitespace(ctx.input);
         bool emitted = false;
 
@@ -1074,16 +1253,25 @@ bool compile_data_section(CompilerContext& ctx){
                 count = static_cast<uint32_t>(rep.uint_val);
             }
 
-            switch(size){
-                case 1: *buffer = static_cast<uint8_t>(num.uint_val); break;
-                case 2: *(uint16_t*)buffer = static_cast<uint16_t>(num.uint_val); break;
-                case 4: *(uint32_t*)buffer = static_cast<uint32_t>(num.uint_val); break;
-                case 8: *(uint64_t*)buffer = num.uint_val; break;
-            }
+            if (!isStruct) {
+                switch(size){
+                    case 1: *buffer = static_cast<uint8_t>(num.uint_val); break;
+                    case 2: *(uint16_t*)buffer = static_cast<uint16_t>(num.uint_val); break;
+                    case 4: *(uint32_t*)buffer = static_cast<uint32_t>(num.uint_val); break;
+                    case 8: *(uint64_t*)buffer = num.uint_val; break;
+                }
 
-            for(uint32_t i=0; i<count; i++){
-                for(uint32_t j=0; j<size; j++){
-                    ctx.data_section.push_back(buffer[j]);
+                for(uint32_t i=0; i<count; i++){
+                    for(uint32_t j=0; j<size; j++){
+                        ctx.data_section.push_back(buffer[j]);
+                    }
+                }
+            }
+            else {
+                for (uint32_t i=0; i<count; i++) {
+                    for (uint32_t j=0; j<size; j++) {
+                        ctx.data_section.push_back(0);
+                    }
                 }
             }
 
@@ -1114,7 +1302,7 @@ bool compile_meta_section(CompilerContext& ctx){
         if(!*ctx.input) return true;
 
         if(parse_label_export(ctx)) continue;
-
+        if (parse_struct_def(ctx)) continue;
         return compile_section(ctx);
     } while(true);
 }

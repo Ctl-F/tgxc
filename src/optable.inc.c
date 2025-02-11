@@ -1,7 +1,7 @@
 #ifdef INCLUDE_DATA_TABLE
 typedef struct { uint16_t opcode; uint32_t param_id; const char* name; } Mnemonic;
 
-#define DISASSEMBLER_TABLE_LEN 259
+#define DISASSEMBLER_TABLE_LEN 279
 static Mnemonic s_DisassemblerTable[] = {
     (Mnemonic){ .opcode = 0x0000, .param_id = 0, .name = "nop" },
     (Mnemonic){ .opcode = 0x0001, .param_id = 17, .name = "mov" },
@@ -248,6 +248,26 @@ static Mnemonic s_DisassemblerTable[] = {
     (Mnemonic){ .opcode = 0x00F4, .param_id = 11, .name = "jge" },
     (Mnemonic){ .opcode = 0x00F5, .param_id = 27, .name = "jle" },
     (Mnemonic){ .opcode = 0x00F6, .param_id = 11, .name = "jle" },
+    (Mnemonic){ .opcode = 0x00F7, .param_id = 44051, .name = "mov" },
+    (Mnemonic){ .opcode = 0x00F8, .param_id = 44050, .name = "mov" },
+    (Mnemonic){ .opcode = 0x00F9, .param_id = 44049, .name = "mov" },
+    (Mnemonic){ .opcode = 0x00FA, .param_id = 44052, .name = "mov" },
+    (Mnemonic){ .opcode = 0x00FB, .param_id = 44055, .name = "mov" },
+    (Mnemonic){ .opcode = 0x00FC, .param_id = 15041, .name = "mov" },
+    (Mnemonic){ .opcode = 0x00FD, .param_id = 10945, .name = "mov" },
+    (Mnemonic){ .opcode = 0x00FE, .param_id = 6849, .name = "mov" },
+    (Mnemonic){ .opcode = 0x00FF, .param_id = 19137, .name = "mov" },
+    (Mnemonic){ .opcode = 0x0100, .param_id = 31425, .name = "mov" },
+    (Mnemonic){ .opcode = 0x0101, .param_id = 44307, .name = "mov" },
+    (Mnemonic){ .opcode = 0x0102, .param_id = 44306, .name = "mov" },
+    (Mnemonic){ .opcode = 0x0103, .param_id = 44305, .name = "mov" },
+    (Mnemonic){ .opcode = 0x0104, .param_id = 44308, .name = "mov" },
+    (Mnemonic){ .opcode = 0x0105, .param_id = 44311, .name = "mov" },
+    (Mnemonic){ .opcode = 0x0106, .param_id = 15057, .name = "mov" },
+    (Mnemonic){ .opcode = 0x0107, .param_id = 10961, .name = "mov" },
+    (Mnemonic){ .opcode = 0x0108, .param_id = 6865, .name = "mov" },
+    (Mnemonic){ .opcode = 0x0109, .param_id = 19153, .name = "mov" },
+    (Mnemonic){ .opcode = 0x010A, .param_id = 31441, .name = "mov" },
     (Mnemonic){ .opcode = 0x010B, .param_id = 0, .name = "ret" },
     (Mnemonic){ .opcode = 0x010C, .param_id = 0, .name = "hlt" },
     (Mnemonic){ .opcode = 0x010D, .param_id = 3, .name = "int" },

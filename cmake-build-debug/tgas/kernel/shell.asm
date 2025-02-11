@@ -29,14 +29,9 @@ shell_dummy: str "<SHELL>\n";
 
 window_title: str "Hello Window";
 
-initialize_system_pbuffer_begin:
-title_ptr: i32 0
-window_mode: i32 0
-initialize_system_pbuffer_end:
 
-set_clear_color_pbuffer_begin:
-clear_color_rgb: i8 0, 100, 128
-set_clear_color_pbuffer_end:
+WindowInitParams: struct gWindowInitParams 0
+WindowClearColor: struct gColorRGB 0
 
 quit_event_triggered: i8 0
 
@@ -45,31 +40,40 @@ debug_i32: str "%d\n"
 $section prog
 init_graphics_test:
     push jr;
-    trace 0
 
-    break;
 
     gqr;
 
     ; initialize system
-    GFX_RECORD_INIT_WINDOW(initialize_system_pbuffer_begin, initialize_system_pbuffer_end)
-    GFX_RECORD_SET_CLEAR_COLOR(set_clear_color_pbuffer_begin, set_clear_color_pbuffer_end)
+    mov ra, window_title
+    mov rb, WindowInitParams;
+    mov rc, offsetof[gWindowInitParams:pWindowTitle]
+    mov [rb]+rc, ra
+
+    ; initialize color
+    xor ra, ra;
+    mov ras, 100
+    mov rb, WindowClearColor;
+    mov rc, offsetof[gColorRGB:g];
+    mov [rb]+rc, ras;
+    add ras, 50
+    mov rc, offsetof[gColorRGB:b];
+    mov [rb]+rc, ras;
+
+    GFX_RECORD_INIT_WINDOW(WindowInitParams)
+    GFX_RECORD_SET_CLEAR_COLOR(WindowClearColor)
     GFX_RECORD_CLEAR()
     GFX_RECORD_EOF()
 
-    trace 4;
-
     gqs;
+    gqr;
 
-    trace 20;
 
     GFX_AWAIT_GPU()
 
-    trace 50
-
+    GFX_RECORD_SET_CLEAR_COLOR(WindowClearColor)
+    GFX_RECORD_CLEAR()
     GFX_RECORD_PRESENT()
-
-    trace 100
 
     mov ra, 0x00000007;
     mov m0h, ra;
@@ -77,12 +81,9 @@ init_graphics_test:
     mov m1l, ra;
     gqai;
 
-    trace 200
-
     GFX_RECORD_EOF()
     xor rb, rb;
 
-    trace 300
 
     ; dummy eventloop
 event_loop_beg:
@@ -90,22 +91,35 @@ event_loop_beg:
     gqs;
     GFX_AWAIT_GPU()
 
-    trace 400
+    xor rb, rb
+    mov ra, WindowClearColor
+    mov rbs, [ra]
+    inc rbs
+    mov [ra], rbs
+    inc ra
+    mov rbs, [ra]
+    inc rbs
+    mov [ra], rbs
+    inc ra
+    mov rbs, [ra]
+    inc rbs
+    mov [ra], rbs
+
 
     mov ra, quit_event_triggered;
     mov rbs, [ra];
     cmp rbs, 0;
-    trace 500
     jz event_loop_beg;
 event_loop_end:
-    trace 1;
+
+    gqr;
     GFX_RECORD_FREE_WINDOW()
     GFX_RECORD_EOF()
 
-    trace 2;
+
     gqs;
     GFX_AWAIT_GPU()
-    trace 3;
+
     pop jr;
     ret;
 

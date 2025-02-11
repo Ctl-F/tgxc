@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <SDL2/SDL_thread.h>
 
+#include <time.h>
 
 
 #define TGX_ENUM int
@@ -223,6 +224,8 @@ typedef struct {
 #define GPU_ERR_INIT 0x01
 #define GPU_ERR_NULL_DISPLAY 0x02
 #define GPU_ERR_STACK_OVERFLOW 0x03
+#define GPU_ERR_REINIT 0x04
+#define GPU_ERR_UNKNOWN_CMD 0x05
 
 typedef struct {
 

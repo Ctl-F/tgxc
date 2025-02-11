@@ -133,6 +133,11 @@ int GraphicsMain(void* arg) {
         SDL_UnlockMutex(gu->mutex);
 
         if (shutdown) {
+            if (gu->context.window != NULL) {
+                SDL_DestroyWindow(gu->context.window);
+                gu->context.window = NULL;
+            }
+            SDL_Quit();
             break;
         }
 
@@ -146,13 +151,23 @@ int GraphicsMain(void* arg) {
             }
 
             switch (instruction) {
+                default: {
+                    GraphicsTriggerError(gu, GPU_ERR_UNKNOWN_CMD);
+                    break;
+                }
                 case 0x00000000: break;
                 case 0x00000001: {
                     // initialize host window
+                    if (gu->context.window != NULL) {
+                        GraphicsTriggerError(gu, GPU_ERR_REINIT);
+                        break;
+                    }
+
                     if (SDL_Init(SDL_INIT_VIDEO != 0)) {
                         GraphicsTriggerError(gu, GPU_ERR_INIT);
                         break;
                     }
+
 
                     uint8_t* param_buffer = gu->memory_begin + buffer->param_buffer_begin;
 
@@ -231,6 +246,7 @@ int GraphicsMain(void* arg) {
                         switch (event.type) {
                             default:
                                 break;
+
                             case SDL_QUIT:
                                 *result = 1;
                                 break;
@@ -269,9 +285,9 @@ void TriggerGraphics(GraphicsThread* gu) {
 
 #define TGX_DISPATCH(table, instr, sys) instr = *((Instruction*)((sys).Memory.memory_begin + (sys).PU.gp32[REG_IP].full)); goto *table[instr.opcode]
 
-//#define TGX_PROFILE
+#define TGX_PROFILE_SIMPLE
 
-#ifdef TGX_PROFILE
+#ifdef TGX_PROFILE_PER_CMD
 
 #include <stdio.h>
 
@@ -314,6 +330,26 @@ static uint64_t ProfilerTimestamp_Start_, ProfilerTimestamp_End_;
         } \
         fclose(__pfr); \
     } } while(false)
+#elif defined(TGX_PROFILE_SIMPLE)
+
+static uint64_t s_PROFILE_INSTRUCTION_COUNTER = 0;
+static uint64_t s_TIMESTAMP_START = 0;
+static uint64_t S_TIMESTAMP_END = 0;
+
+#define TGX_PROFILER_INITIALIZE() do { s_PROFILE_INSTRUCTION_COUNTER = 0; \
+    struct timespec ts; \
+    clock_gettime(CLOCK_REALTIME, &ts); \
+    s_TIMESTAMP_START = (uint64_t)(ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL); \
+    } while(false)
+
+#define TGX_PROFILE_CALL(op, code) s_PROFILE_INSTRUCTION_COUNTER++
+#define TGX_PROFILE_END(op, code)
+
+#define TGX_PROFILE_REPORT(file) do { \
+    struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts); \
+    S_TIMESTAMP_END = (uint64_t)(ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL); \
+    printf("%lu operations performed in %lums\n", s_PROFILE_INSTRUCTION_COUNTER, S_TIMESTAMP_END - s_TIMESTAMP_START); \
+    } while (0)
 
 #else
 
@@ -375,81 +411,82 @@ static uint64_t ProfilerTimestamp_Start_, ProfilerTimestamp_End_;
 static int LaunchDebugShell(TGXContext* ctx);
 
 int program_thread_exec(TGXContext* sys){
+    // THIS ORDER MATTERS!! The opcode MUST be in the index of the slot that is equal to it's opcode
     void* _jTable[] = {
-/* 0x0000 */        TGX_ADDR(NOP),               TGX_ADDR(MOVR32_R32),     TGX_ADDR(MOVR16_R16),     TGX_ADDR(MOVR8_R8),
-/* 0x0004 */        TGX_ADDR(MOVR64_R64),        TGX_ADDR(MOVAR32_C32),    TGX_ADDR(MOVAR32_C8),     TGX_ADDR(MOVTBL_R32_IC8),
-/* 0x0008 */        TGX_ADDR(MOVTBL_R32_IR8),    TGX_ADDR(MOVR32_TBL_IC8), TGX_ADDR(MOVR32_TBL_IR8), TGX_ADDR(MOVR32_R64H),
-/* 0x000C */        TGX_ADDR(MOVR32_R64L),       TGX_ADDR(MOVR64H_R32),    TGX_ADDR(MOVR64L_R32),    TGX_ADDR(MOVR32_C32),
-/* 0x0010 */        TGX_ADDR(MOVR16_C16),        TGX_ADDR(MOVR8_C8),       TGX_ADDR(MOVM0_C48),      TGX_ADDR(MOVM1_C48),
-/* 0x0014 */        TGX_ADDR(MOVF32_F32),        TGX_ADDR(MOVF32_C32),     TGX_ADDR(MOVR32_F32),     TGX_ADDR(MOVR32_F32_C),
-/* 0x0018 */        TGX_ADDR(MOVF32_R32),        TGX_ADDR(MOVF32_R32_C),   TGX_ADDR(MOVR32_AR32),    TGX_ADDR(MOVR8_AR32),
-/* 0x001C */        TGX_ADDR(MOVR16_AR32),       TGX_ADDR(MOVR64_AR32),    TGX_ADDR(MOVAR32_R8),     TGX_ADDR(MOVAR32_R16),
-/* 0x0020 */        TGX_ADDR(MOVAR32_R32),       TGX_ADDR(MOVAR32_R64),    TGX_ADDR(MOVAR32_F32),    TGX_ADDR(MOVAR32_AR32),
-/* 0x0024 */        TGX_ADDR(MOVF32_AR32),       TGX_ADDR(MOVAR32_AR32_I), TGX_ADDR(MOVAR32_AR32_D), TGX_ADDR(SWAP_R32),
-/* 0x0028 */        TGX_ADDR(SWAP_R8),           TGX_ADDR(SWAP_R16),       TGX_ADDR(SWAP_R64),       TGX_ADDR(SWAP_F32),
-/* 0x002C */        TGX_ADDR(MEMCPY),            TGX_ADDR(MEMCMP),         TGX_ADDR(MEMCLR_R8),      TGX_ADDR(MEMCLR_R16),
-/* 0x0030 */        TGX_ADDR(MEMCLR_R32),        TGX_ADDR(MEMCLR_R64),     TGX_ADDR(PUSH_R8),        TGX_ADDR(PUSH_C8),
-/* 0x0034 */        TGX_ADDR(PUSH_R16),          TGX_ADDR(PUSH_C16),       TGX_ADDR(PUSH_R32),       TGX_ADDR(PUSH_C32),
-/* 0x0038 */        TGX_ADDR(PUSH_R64),          TGX_ADDR(PUSH_C48),       TGX_ADDR(PUSH_F32),       TGX_ADDR(PUSH_CF32),
-/* 0x003C */        TGX_ADDR(POP_R8),            TGX_ADDR(POP_R16),        TGX_ADDR(POP_R32),        TGX_ADDR(POP_R64),
-/* 0x0040 */        TGX_ADDR(POP_F32),           TGX_ADDR(PUSH_RARZ),      TGX_ADDR(POP_RZRA),       TGX_ADDR(MOVR32_TBL_R8_R8),
+/* 0x0000 */        TGX_ADDR(NOP),               TGX_ADDR(MOVR32_R32),      TGX_ADDR(MOVR16_R16),      TGX_ADDR(MOVR8_R8),
+/* 0x0004 */        TGX_ADDR(MOVR64_R64),        TGX_ADDR(MOVAR32_C32),     TGX_ADDR(MOVAR32_C8),      TGX_ADDR(MOVTBL_R32_IC8),
+/* 0x0008 */        TGX_ADDR(MOVTBL_R32_IR8),    TGX_ADDR(MOVR32_TBL_IC8),  TGX_ADDR(MOVR32_TBL_IR8),  TGX_ADDR(MOVR32_R64H),
+/* 0x000C */        TGX_ADDR(MOVR32_R64L),       TGX_ADDR(MOVR64H_R32),     TGX_ADDR(MOVR64L_R32),     TGX_ADDR(MOVR32_C32),
+/* 0x0010 */        TGX_ADDR(MOVR16_C16),        TGX_ADDR(MOVR8_C8),        TGX_ADDR(MOVM0_C48),       TGX_ADDR(MOVM1_C48),
+/* 0x0014 */        TGX_ADDR(MOVF32_F32),        TGX_ADDR(MOVF32_C32),      TGX_ADDR(MOVR32_F32),      TGX_ADDR(MOVR32_F32_C),
+/* 0x0018 */        TGX_ADDR(MOVF32_R32),        TGX_ADDR(MOVF32_R32_C),    TGX_ADDR(MOVR32_AR32),     TGX_ADDR(MOVR8_AR32),
+/* 0x001C */        TGX_ADDR(MOVR16_AR32),       TGX_ADDR(MOVR64_AR32),     TGX_ADDR(MOVAR32_R8),      TGX_ADDR(MOVAR32_R16),
+/* 0x0020 */        TGX_ADDR(MOVAR32_R32),       TGX_ADDR(MOVAR32_R64),     TGX_ADDR(MOVAR32_F32),     TGX_ADDR(MOVAR32_AR32),
+/* 0x0024 */        TGX_ADDR(MOVF32_AR32),       TGX_ADDR(MOVAR32_AR32_I),  TGX_ADDR(MOVAR32_AR32_D),  TGX_ADDR(SWAP_R32),
+/* 0x0028 */        TGX_ADDR(SWAP_R8),           TGX_ADDR(SWAP_R16),        TGX_ADDR(SWAP_R64),        TGX_ADDR(SWAP_F32),
+/* 0x002C */        TGX_ADDR(MEMCPY),            TGX_ADDR(MEMCMP),          TGX_ADDR(MEMCLR_R8),       TGX_ADDR(MEMCLR_R16),
+/* 0x0030 */        TGX_ADDR(MEMCLR_R32),        TGX_ADDR(MEMCLR_R64),      TGX_ADDR(PUSH_R8),         TGX_ADDR(PUSH_C8),
+/* 0x0034 */        TGX_ADDR(PUSH_R16),          TGX_ADDR(PUSH_C16),        TGX_ADDR(PUSH_R32),        TGX_ADDR(PUSH_C32),
+/* 0x0038 */        TGX_ADDR(PUSH_R64),          TGX_ADDR(PUSH_C48),        TGX_ADDR(PUSH_F32),        TGX_ADDR(PUSH_CF32),
+/* 0x003C */        TGX_ADDR(POP_R8),            TGX_ADDR(POP_R16),         TGX_ADDR(POP_R32),         TGX_ADDR(POP_R64),
+/* 0x0040 */        TGX_ADDR(POP_F32),           TGX_ADDR(PUSH_RARZ),       TGX_ADDR(POP_RZRA),        TGX_ADDR(MOVR32_TBL_R8_R8),
 /* 0x0044 */        TGX_ADDR(MOVTBL_R8_R8_AR32),
-/* 0x0045 */        TGX_ADDR(ADDR32_R32),        TGX_ADDR(ADDR8_R8),       TGX_ADDR(ADDR16_R16),     TGX_ADDR(ADDR64_R64),
-/* 0x0049 */        TGX_ADDR(ADDR32_C32),        TGX_ADDR(ADDR8_C8),       TGX_ADDR(ADDR16_C16),     TGX_ADDR(ADDR64_C40),
-/* 0x004D */        TGX_ADDR(SUBR32_R32),        TGX_ADDR(SUBR8_R8),       TGX_ADDR(SUBR16_R16),     TGX_ADDR(SUBR64_R64),
-/* 0x0051 */        TGX_ADDR(SUBR32_C32),        TGX_ADDR(SUBR8_C8),       TGX_ADDR(SUBR16_C16),     TGX_ADDR(SUBR64_C40),
-/* 0x0055 */        TGX_ADDR(MULR32_R32),        TGX_ADDR(MULR8_R8),       TGX_ADDR(MULR16_R16),     TGX_ADDR(MULR64_R64),
-/* 0x0059 */        TGX_ADDR(MULR32_C32),        TGX_ADDR(MULR8_C8),       TGX_ADDR(MULR16_C16),     TGX_ADDR(MULR64_C40),
-/* 0x005D */        TGX_ADDR(DIVR32_R32),        TGX_ADDR(DIVR8_R8),       TGX_ADDR(DIVR16_R16),     TGX_ADDR(DIVR64_R64),
-/* 0x0061 */        TGX_ADDR(DIVR32_C32),        TGX_ADDR(DIVR8_C8),       TGX_ADDR(DIVR16_C16),     TGX_ADDR(DIVR64_C40),
-/* 0x0065 */        TGX_ADDR(MODR32_R32),        TGX_ADDR(MODR8_R8),       TGX_ADDR(MODR16_R16),     TGX_ADDR(MODR64_R64),
-/* 0x0069 */        TGX_ADDR(MODR32_C32),        TGX_ADDR(MODR8_C8),       TGX_ADDR(MODR16_C16),     TGX_ADDR(MODR64_C40),
-/* 0x006D */        TGX_ADDR(NEGR32),            TGX_ADDR(NEGR8),          TGX_ADDR(NEGR16),         TGX_ADDR(NEGR64),
-/* 0x0071 */        TGX_ADDR(INCR32),            TGX_ADDR(INCR8),          TGX_ADDR(INCR16),         TGX_ADDR(INCR64),
-/* 0x0075 */        TGX_ADDR(DECR32),            TGX_ADDR(DECR8),          TGX_ADDR(DECR16),         TGX_ADDR(DECR64),
-/* 0x0079 */        TGX_ADDR(RBRR32_R32),        TGX_ADDR(RBRR8_R8),       TGX_ADDR(RBRR16_R16),     TGX_ADDR(RBRR64_R64),
-/* 0x007D */        TGX_ADDR(RBRR32_C32),        TGX_ADDR(RBRR8_C8),       TGX_ADDR(RBRR16_C16),     TGX_ADDR(RBRR64_C40),
-/* 0x0081 */        TGX_ADDR(RBL3R2_R32),        TGX_ADDR(RBLR8_R8),       TGX_ADDR(RBLR16_R16),     TGX_ADDR(RBLR64_R64),
-/* 0x0085 */        TGX_ADDR(RBLR32_C32),        TGX_ADDR(RBLR8_C8),       TGX_ADDR(RBLR16_C16),     TGX_ADDR(RBLR64_C40),
-/* 0x0089 */        TGX_ADDR(CMPR32_R32),        TGX_ADDR(CMPR8_R8),       TGX_ADDR(CMPR16_R16),     TGX_ADDR(CMPR64_R64),
-/* 0x008D */        TGX_ADDR(CMPR32_C32),        TGX_ADDR(CMPR8_C8),       TGX_ADDR(CMPR16_C16),     TGX_ADDR(CMPR64_C40),
-/* 0x0091 */        TGX_ADDR(LANDR32_R32),       TGX_ADDR(LANDR8_R8),      TGX_ADDR(LANDR16_R16),    TGX_ADDR(LANDR64_R64),
-/* 0x0095 */        TGX_ADDR(LORR32_R32),        TGX_ADDR(LORR8_R8),       TGX_ADDR(LORR16_R16),     TGX_ADDR(LORR64_R64),
-/* 0x0099 */        TGX_ADDR(LNOTR32_R32),       TGX_ADDR(LNOTR8_R8),      TGX_ADDR(LNOTR16_R16),    TGX_ADDR(LNOTR64_R64),
-/* 0x009D */        TGX_ADDR(ANDR32_R32),        TGX_ADDR(ANDR8_R8),       TGX_ADDR(ANDR16_R16),     TGX_ADDR(ANDR64_R64),
+/* 0x0045 */        TGX_ADDR(ADDR32_R32),        TGX_ADDR(ADDR8_R8),        TGX_ADDR(ADDR16_R16),      TGX_ADDR(ADDR64_R64),
+/* 0x0049 */        TGX_ADDR(ADDR32_C32),        TGX_ADDR(ADDR8_C8),        TGX_ADDR(ADDR16_C16),      TGX_ADDR(ADDR64_C40),
+/* 0x004D */        TGX_ADDR(SUBR32_R32),        TGX_ADDR(SUBR8_R8),        TGX_ADDR(SUBR16_R16),      TGX_ADDR(SUBR64_R64),
+/* 0x0051 */        TGX_ADDR(SUBR32_C32),        TGX_ADDR(SUBR8_C8),        TGX_ADDR(SUBR16_C16),      TGX_ADDR(SUBR64_C40),
+/* 0x0055 */        TGX_ADDR(MULR32_R32),        TGX_ADDR(MULR8_R8),        TGX_ADDR(MULR16_R16),      TGX_ADDR(MULR64_R64),
+/* 0x0059 */        TGX_ADDR(MULR32_C32),        TGX_ADDR(MULR8_C8),        TGX_ADDR(MULR16_C16),      TGX_ADDR(MULR64_C40),
+/* 0x005D */        TGX_ADDR(DIVR32_R32),        TGX_ADDR(DIVR8_R8),        TGX_ADDR(DIVR16_R16),      TGX_ADDR(DIVR64_R64),
+/* 0x0061 */        TGX_ADDR(DIVR32_C32),        TGX_ADDR(DIVR8_C8),        TGX_ADDR(DIVR16_C16),      TGX_ADDR(DIVR64_C40),
+/* 0x0065 */        TGX_ADDR(MODR32_R32),        TGX_ADDR(MODR8_R8),        TGX_ADDR(MODR16_R16),      TGX_ADDR(MODR64_R64),
+/* 0x0069 */        TGX_ADDR(MODR32_C32),        TGX_ADDR(MODR8_C8),        TGX_ADDR(MODR16_C16),      TGX_ADDR(MODR64_C40),
+/* 0x006D */        TGX_ADDR(NEGR32),            TGX_ADDR(NEGR8),           TGX_ADDR(NEGR16),          TGX_ADDR(NEGR64),
+/* 0x0071 */        TGX_ADDR(INCR32),            TGX_ADDR(INCR8),           TGX_ADDR(INCR16),          TGX_ADDR(INCR64),
+/* 0x0075 */        TGX_ADDR(DECR32),            TGX_ADDR(DECR8),           TGX_ADDR(DECR16),          TGX_ADDR(DECR64),
+/* 0x0079 */        TGX_ADDR(RBRR32_R32),        TGX_ADDR(RBRR8_R8),        TGX_ADDR(RBRR16_R16),      TGX_ADDR(RBRR64_R64),
+/* 0x007D */        TGX_ADDR(RBRR32_C32),        TGX_ADDR(RBRR8_C8),        TGX_ADDR(RBRR16_C16),      TGX_ADDR(RBRR64_C40),
+/* 0x0081 */        TGX_ADDR(RBL3R2_R32),        TGX_ADDR(RBLR8_R8),        TGX_ADDR(RBLR16_R16),      TGX_ADDR(RBLR64_R64),
+/* 0x0085 */        TGX_ADDR(RBLR32_C32),        TGX_ADDR(RBLR8_C8),        TGX_ADDR(RBLR16_C16),      TGX_ADDR(RBLR64_C40),
+/* 0x0089 */        TGX_ADDR(CMPR32_R32),        TGX_ADDR(CMPR8_R8),        TGX_ADDR(CMPR16_R16),      TGX_ADDR(CMPR64_R64),
+/* 0x008D */        TGX_ADDR(CMPR32_C32),        TGX_ADDR(CMPR8_C8),        TGX_ADDR(CMPR16_C16),      TGX_ADDR(CMPR64_C40),
+/* 0x0091 */        TGX_ADDR(LANDR32_R32),       TGX_ADDR(LANDR8_R8),       TGX_ADDR(LANDR16_R16),     TGX_ADDR(LANDR64_R64),
+/* 0x0095 */        TGX_ADDR(LORR32_R32),        TGX_ADDR(LORR8_R8),        TGX_ADDR(LORR16_R16),      TGX_ADDR(LORR64_R64),
+/* 0x0099 */        TGX_ADDR(LNOTR32_R32),       TGX_ADDR(LNOTR8_R8),       TGX_ADDR(LNOTR16_R16),     TGX_ADDR(LNOTR64_R64),
+/* 0x009D */        TGX_ADDR(ANDR32_R32),        TGX_ADDR(ANDR8_R8),        TGX_ADDR(ANDR16_R16),      TGX_ADDR(ANDR64_R64),
 /* 0x00A1 */        TGX_ADDR(TRACE),
-/* 0x00A2 */        TGX_ADDR(XORR32_R32),        TGX_ADDR(XORR8_R8),       TGX_ADDR(XORR16_R16),     TGX_ADDR(XORR64_R64),
-/* 0x00A6 */        TGX_ADDR(ORR32_R32),         TGX_ADDR(ORR8_R8),        TGX_ADDR(ORR16_R16),      TGX_ADDR(ORR64_R64),
-/* 0x00AA */        TGX_ADDR(NOTR32_R32),        TGX_ADDR(NOTR8_R8),       TGX_ADDR(NOTR16_R16),     TGX_ADDR(NOTR64_R64),
-/* 0x00AE */        TGX_ADDR(MXB32),             TGX_ADDR(MXBF32),          TGX_ADDR(SQR32),          TGX_ADDR(SQR64),
-/* 0x00B2 */        TGX_ADDR(ABS8),              TGX_ADDR(ABS16),          TGX_ADDR(ABS32),          TGX_ADDR(ABS64),
-/* 0x00B6 */        TGX_ADDR(ADDF32),            TGX_ADDR(ADDFC32),        TGX_ADDR(SUBF32),         TGX_ADDR(SUBFC32),
-/* 0x00BA */        TGX_ADDR(MULF32),            TGX_ADDR(MULFC32),        TGX_ADDR(DIVF32),         TGX_ADDR(DIVFC32),
-/* 0x00BE */        TGX_ADDR(MODF32),            TGX_ADDR(MODFC32),        TGX_ADDR(FLRF32),         TGX_ADDR(CEILF32),
-/* 0x00C2 */        TGX_ADDR(ROUNDF32),          TGX_ADDR(SQRTF32),        TGX_ADDR(CMPF32),         TGX_ADDR(CMPFC32),
-/* 0x00C6 */        TGX_ADDR(VEC4NORM),          TGX_ADDR(VEC4ADD),        TGX_ADDR(VEC4SUB),        TGX_ADDR(VEC4MUL),
-/* 0x00CA */        TGX_ADDR(VEC4DIV),           TGX_ADDR(DOT),            TGX_ADDR(LEN),            TGX_ADDR(COSF32),
-/* 0x00CE */        TGX_ADDR(COSFC32),           TGX_ADDR(SINF32),         TGX_ADDR(SINFC32),        TGX_ADDR(TANF32),
-/* 0x00D2 */        TGX_ADDR(TANFC32),           TGX_ADDR(ACOSF32),        TGX_ADDR(ACOSFC32),       TGX_ADDR(ASINF32),
-/* 0x00D6 */        TGX_ADDR(ASINFC32),          TGX_ADDR(ATANF32),        TGX_ADDR(ATANFC32),       TGX_ADDR(ATAN2),
-/* 0x00DA */        TGX_ADDR(ACOSBCD),           TGX_ADDR(ASINBCD),        TGX_ADDR(ATANBCD),        TGX_ADDR(NEGF32),
-/* 0x00DE */        TGX_ADDR(SWZL),              TGX_ADDR(POWF32),         TGX_ADDR(LOGF32),         TGX_ADDR(LNF32),
-/* 0x00E2 */        TGX_ADDR(EF32),              TGX_ADDR(LDPI),           TGX_ADDR(LDE),            TGX_ADDR(INVERSE),
+/* 0x00A2 */        TGX_ADDR(XORR32_R32),        TGX_ADDR(XORR8_R8),        TGX_ADDR(XORR16_R16),      TGX_ADDR(XORR64_R64),
+/* 0x00A6 */        TGX_ADDR(ORR32_R32),         TGX_ADDR(ORR8_R8),         TGX_ADDR(ORR16_R16),       TGX_ADDR(ORR64_R64),
+/* 0x00AA */        TGX_ADDR(NOTR32_R32),        TGX_ADDR(NOTR8_R8),        TGX_ADDR(NOTR16_R16),      TGX_ADDR(NOTR64_R64),
+/* 0x00AE */        TGX_ADDR(MXB32),             TGX_ADDR(MXBF32),          TGX_ADDR(SQR32),           TGX_ADDR(SQR64),
+/* 0x00B2 */        TGX_ADDR(ABS8),              TGX_ADDR(ABS16),           TGX_ADDR(ABS32),           TGX_ADDR(ABS64),
+/* 0x00B6 */        TGX_ADDR(ADDF32),            TGX_ADDR(ADDFC32),         TGX_ADDR(SUBF32),          TGX_ADDR(SUBFC32),
+/* 0x00BA */        TGX_ADDR(MULF32),            TGX_ADDR(MULFC32),         TGX_ADDR(DIVF32),          TGX_ADDR(DIVFC32),
+/* 0x00BE */        TGX_ADDR(MODF32),            TGX_ADDR(MODFC32),         TGX_ADDR(FLRF32),          TGX_ADDR(CEILF32),
+/* 0x00C2 */        TGX_ADDR(ROUNDF32),          TGX_ADDR(SQRTF32),         TGX_ADDR(CMPF32),          TGX_ADDR(CMPFC32),
+/* 0x00C6 */        TGX_ADDR(VEC4NORM),          TGX_ADDR(VEC4ADD),         TGX_ADDR(VEC4SUB),         TGX_ADDR(VEC4MUL),
+/* 0x00CA */        TGX_ADDR(VEC4DIV),           TGX_ADDR(DOT),             TGX_ADDR(LEN),             TGX_ADDR(COSF32),
+/* 0x00CE */        TGX_ADDR(COSFC32),           TGX_ADDR(SINF32),          TGX_ADDR(SINFC32),         TGX_ADDR(TANF32),
+/* 0x00D2 */        TGX_ADDR(TANFC32),           TGX_ADDR(ACOSF32),         TGX_ADDR(ACOSFC32),        TGX_ADDR(ASINF32),
+/* 0x00D6 */        TGX_ADDR(ASINFC32),          TGX_ADDR(ATANF32),         TGX_ADDR(ATANFC32),        TGX_ADDR(ATAN2),
+/* 0x00DA */        TGX_ADDR(ACOSBCD),           TGX_ADDR(ASINBCD),         TGX_ADDR(ATANBCD),         TGX_ADDR(NEGF32),
+/* 0x00DE */        TGX_ADDR(SWZL),              TGX_ADDR(POWF32),          TGX_ADDR(LOGF32),          TGX_ADDR(LNF32),
+/* 0x00E2 */        TGX_ADDR(EF32),              TGX_ADDR(LDPI),            TGX_ADDR(LDE),             TGX_ADDR(INVERSE),
 /* 0x00E6 */        TGX_ADDR(ABSF32),
-/* 0x00E7 */        TGX_ADDR(JMPPR32),           TGX_ADDR(JMPC32),         TGX_ADDR(JZR32),          TGX_ADDR(JZC32),
-/* 0x00EB */        TGX_ADDR(JNZR32),            TGX_ADDR(JNZC32),         TGX_ADDR(JZDR32),         TGX_ADDR(JNZDR32),
-/* 0x00EF */        TGX_ADDR(JGTR32),            TGX_ADDR(JGTC32),         TGX_ADDR(JLTR32),         TGX_ADDR(JLTC32),
-/* 0x00F3 */        TGX_ADDR(JGER32),            TGX_ADDR(JGEC32),         TGX_ADDR(JLER32),         TGX_ADDR(JLEC32),
-/* 0x00F7 */        TGX_ADDR(NOP),               TGX_ADDR(NOP),            TGX_ADDR(NOP),            TGX_ADDR(NOP),
-/* 0x00FB */        TGX_ADDR(NOP),               TGX_ADDR(NOP),            TGX_ADDR(NOP),            TGX_ADDR(NOP),
-/* 0x00FF */        TGX_ADDR(NOP),               TGX_ADDR(NOP),            TGX_ADDR(NOP),            TGX_ADDR(NOP),
-/* 0x0103 */        TGX_ADDR(NOP),               TGX_ADDR(NOP),            TGX_ADDR(NOP),            TGX_ADDR(NOP),
-/* 0x0107 */        TGX_ADDR(NOP),               TGX_ADDR(NOP),            TGX_ADDR(NOP),            TGX_ADDR(NOP),
-/* 0x010B */        TGX_ADDR(RET),               TGX_ADDR(HLT),            TGX_ADDR(INTR8),          TGX_ADDR(INTC8),
-/* 0x010F */        TGX_ADDR(INITEXR32),         TGX_ADDR(INITEXC32),      TGX_ADDR(INVKEXR32),      TGX_ADDR(INVKEXC32),
-/* 0x0113 */        TGX_ADDR(DEINITEXR32),       TGX_ADDR(DEINITEXC32),    TGX_ADDR(SYSCALLC32),     TGX_ADDR(BREAK),
-/* 0x0117 */        TGX_ADDR(GQPS),              TGX_ADDR(GQS),            TGX_ADDR(GQAI),           TGX_ADDR(GQR),
-/* 0x011B */        TGX_ADDR(GQSI),              TGX_ADDR(GQPC),           TGX_ADDR(GQPF),           TGX_ADDR(GQPE),
+/* 0x00E7 */        TGX_ADDR(JMPPR32),           TGX_ADDR(JMPC32),          TGX_ADDR(JZR32),           TGX_ADDR(JZC32),
+/* 0x00EB */        TGX_ADDR(JNZR32),            TGX_ADDR(JNZC32),          TGX_ADDR(JZDR32),          TGX_ADDR(JNZDR32),
+/* 0x00EF */        TGX_ADDR(JGTR32),            TGX_ADDR(JGTC32),          TGX_ADDR(JLTR32),          TGX_ADDR(JLTC32),
+/* 0x00F3 */        TGX_ADDR(JGER32),            TGX_ADDR(JGEC32),          TGX_ADDR(JLER32),          TGX_ADDR(JLEC32),
+/* 0x00F7 */        TGX_ADDR(MOVAR32PR32_R8),    TGX_ADDR(MOVAR32PR32_R16), TGX_ADDR(MOVAR32PR32_R32), TGX_ADDR(MOVAR32R32_R64),
+/* 0x00FB */        TGX_ADDR(MOVAR32PR32_RF32),  TGX_ADDR(MOVR8_AR32PR32),  TGX_ADDR(MOVR16_AR32PR32), TGX_ADDR(MOVR32_AR32PR32),
+/* 0x00FF */        TGX_ADDR(MOVR64_AR32PR32),   TGX_ADDR(MOVRF32_AR32PR32),TGX_ADDR(MOVAR32MR32_R8),  TGX_ADDR(MOVAR32MR32_R16),
+/* 0x0103 */        TGX_ADDR(MOVAR32MR32_R32),   TGX_ADDR(MOVAR32MR32_R64), TGX_ADDR(MOVAR32MR32_RF32),TGX_ADDR(MOVR8_AR32MR32),
+/* 0x0107 */        TGX_ADDR(MOVR16_AR32MR32),   TGX_ADDR(MOVR32_AR32MR32), TGX_ADDR(MOVR64_AR32MR32), TGX_ADDR(MOVRF32_AR32MR32),
+/* 0x010B */        TGX_ADDR(RET),               TGX_ADDR(HLT),             TGX_ADDR(INTR8),           TGX_ADDR(INTC8),
+/* 0x010F */        TGX_ADDR(INITEXR32),         TGX_ADDR(INITEXC32),       TGX_ADDR(INVKEXR32),       TGX_ADDR(INVKEXC32),
+/* 0x0113 */        TGX_ADDR(DEINITEXR32),       TGX_ADDR(DEINITEXC32),     TGX_ADDR(SYSCALLC32),      TGX_ADDR(BREAK),
+/* 0x0117 */        TGX_ADDR(GQPS),              TGX_ADDR(GQS),             TGX_ADDR(GQAI),            TGX_ADDR(GQR),
+/* 0x011B */        TGX_ADDR(GQSI),              TGX_ADDR(GQPC),            TGX_ADDR(GQPF),            TGX_ADDR(GQPE),
     };
 
     uint8_t t8;
@@ -2526,6 +2563,7 @@ int program_thread_exec(TGXContext* sys){
     if (sys->debug_trace != NULL) {
         fprintf(sys->debug_trace, "DBT %08X - ", instruction.const_i32);
         fPrintInst(sys->debug_trace, (Instruction*)(sys->Memory.memory_begin + REG32(sys, REG_IP) + sizeof(Instruction)));
+        fflush(sys->debug_trace);
     }
 
     TGX_PROFILE_END(TRACE, 0x00A1);
@@ -3705,185 +3743,245 @@ int program_thread_exec(TGXContext* sys){
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
-/* NOP
-    TGX_CASE(JNER32):
-    TGX_PROFILE_CALL(JNER32, 0x00F7);
-//#error "Not Implemented"
-    TGX_PROFILE_END(JNER32, 0x00F7);
+
+    TGX_CASE(MOVAR32PR32_R8):
+    TGX_PROFILE_CALL(MOVAR32PR32_R8, 0x00F7);
+
+    MEMACCESS(uint8_t, sys,
+        REG32(sys, instruction.params[0]) + REG32(sys, instruction.params[1])) = REG8(sys, instruction.ext_params[0]);
+
+    TGX_PROFILE_END(MOVAR32PR32_R8, 0x00F7);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(JNEC32):
-    TGX_PROFILE_CALL(JNEC32, 0x00F8);
-//#error "Not Implemented"
-    TGX_PROFILE_END(JNEC32, 0x00F8);
-    TGX_NEXT_INSTR(*sys);
-    TGX_DISPATCH(_jTable, instruction, *sys);
-*/
+    TGX_CASE(MOVAR32PR32_R16):
+    TGX_PROFILE_CALL(MOVAR32PR32_R16, 0x00F8);
 
-/* NOP
-    TGX_CASE(CALLR32):
-    TGX_PROFILE_CALL(CALLR32, 0x00F9);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLR32, 0x00F9);
+    MEMACCESS(uint16_t, sys,
+        REG32(sys, instruction.params[0]) + REG32(sys, instruction.params[1])) = REG16(sys, instruction.ext_params[0]);
+
+    TGX_PROFILE_END(MOVAR32PR32_R16, 0x00F8);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLC32):
-    TGX_PROFILE_CALL(CALLC32, 0x00FA);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLC32, 0x00FA);
+    TGX_CASE(MOVAR32PR32_R32):
+    TGX_PROFILE_CALL(MOVAR32PR32_R32, 0x00F9);
+
+    MEMACCESS(uint32_t, sys,
+        REG32(sys, instruction.params[0]) + REG32(sys, instruction.params[1])) = REG32(sys, instruction.ext_params[0]);
+
+    TGX_PROFILE_END(MOVAR32PR32_R32, 0x00F9);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLZR32):
-    TGX_PROFILE_CALL(CALLZR32, 0x00FB);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLZR32, 0x00FB);
+    TGX_CASE(MOVAR32R32_R64):
+    TGX_PROFILE_CALL(MOVAR32R32_R64, 0x00FA);
+
+    MEMACCESS(uint64_t, sys,
+        REG32(sys, instruction.params[0]) + REG32(sys, instruction.params[1])) = REG64(sys, instruction.ext_params[0]);
+
+    TGX_PROFILE_END(MOVAR32R32_R64, 0x00FA);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLZC32):
-    TGX_PROFILE_CALL(CALLZC32, 0x00FC);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLZC32, 0x00FC);
+    TGX_CASE(MOVAR32PR32_RF32):
+    TGX_PROFILE_CALL(MOVAR32PR32_RF32, 0x00FB);
+
+    MEMACCESS(float, sys,
+        REG32(sys, instruction.params[0]) + REG32(sys, instruction.params[1])) = REGF32(sys, instruction.ext_params[0]);
+
+    TGX_PROFILE_END(MOVAR32PR32_RF32, 0x00FB);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLNZR32):
-    TGX_PROFILE_CALL(CALLNZR32, 0x00FD);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLNZR32, 0x00FD);
+    TGX_CASE(MOVR8_AR32PR32):
+    TGX_PROFILE_CALL(MOVR8_AR32PR32, 0x00FC);
+
+    REG8(sys, instruction.params[0]) = MEMACCESS(uint8_t, sys,
+        REG32(sys, instruction.params[1]) + REG32(sys, instruction.ext_params[0]));
+
+    TGX_PROFILE_END(MOVR8_AR32PR32, 0x00FC);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLNZC32):
-    TGX_PROFILE_CALL(CALLNZC32, 0x00FE);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLNZC32, 0x00FE);
+    TGX_CASE(MOVR16_AR32PR32):
+    TGX_PROFILE_CALL(MOVR16_AR32PR32, 0x00FD);
+
+    REG16(sys, instruction.params[0]) = MEMACCESS(uint16_t, sys,
+            REG32(sys, instruction.params[1]) + REG32(sys, instruction.ext_params[0]));
+
+    TGX_PROFILE_END(MOVR16_AR32PR32, 0x00FD);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLEQR32):
-    TGX_PROFILE_CALL(CALLEQR32, 0x00FF);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLEQR32, 0x00FF);
+    TGX_CASE(MOVR32_AR32PR32):
+    TGX_PROFILE_CALL(MOVR32_AR32PR32, 0x00FE);
+
+    REG32(sys, instruction.params[0]) = MEMACCESS(uint32_t, sys,
+            REG32(sys, instruction.params[1]) + REG32(sys, instruction.ext_params[0]));
+
+    TGX_PROFILE_END(MOVR32_AR32PR32, 0x00FE);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLEQC32):
-    TGX_PROFILE_CALL(CALLEQC32, 0x0100);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLEQC32, 0x0100);
+    TGX_CASE(MOVR64_AR32PR32):
+    TGX_PROFILE_CALL(MOVR64_AR32PR32, 0x00FF);
+
+    REG64(sys, instruction.params[0]) = MEMACCESS(uint64_t, sys,
+            REG32(sys, instruction.params[1]) + REG32(sys, instruction.ext_params[0]));
+
+    TGX_PROFILE_END(MOVR64_AR32PR32, 0x00FF);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLGTR32):
-    TGX_PROFILE_CALL(CALLGTR32, 0x0101);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLGTR32, 0x0101);
+    TGX_CASE(MOVRF32_AR32PR32):
+    TGX_PROFILE_CALL(MOVRF32_AR32PR32, 0x0100);
+
+    REGF32(sys, instruction.params[0]) = MEMACCESS(float, sys,
+            REG32(sys, instruction.params[1]) + REG32(sys, instruction.ext_params[0]));
+
+    TGX_PROFILE_END(MOVRF32_AR32PR32, 0x0100);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLGTC32):
-    TGX_PROFILE_CALL(CALLGTC32, 0x0102);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLGTC32, 0x0102);
+    TGX_CASE(MOVAR32MR32_R8):
+    TGX_PROFILE_CALL(MOVAR32MR32_R8, 0x0101);
+
+    MEMACCESS(uint8_t, sys,
+            REG32(sys, instruction.params[0]) - REG32(sys, instruction.params[1])) = REG8(sys, instruction.ext_params[0]);
+
+    TGX_PROFILE_END(MOVAR32MR32_R8, 0x0101);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLLTR32):
-    TGX_PROFILE_CALL(CALLLTR32, 0x0103);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLLTR32, 0x0103);
+    TGX_CASE(MOVAR32MR32_R16):
+    TGX_PROFILE_CALL(MOVAR32MR32_R16, 0x0102);
+
+    MEMACCESS(uint16_t, sys,
+            REG32(sys, instruction.params[0]) - REG32(sys, instruction.params[1])) = REG16(sys, instruction.ext_params[0]);
+
+    TGX_PROFILE_END(MOVAR32MR32_R16, 0x0102);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLLTC32):
-    TGX_PROFILE_CALL(CALLLTC32, 0x0104);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLLTC32, 0x0104);
+    TGX_CASE(MOVAR32MR32_R32):
+    TGX_PROFILE_CALL(MOVAR32MR32_R32, 0x0103);
+
+    MEMACCESS(uint32_t, sys,
+                REG32(sys, instruction.params[0]) - REG32(sys, instruction.params[1])) = REG32(sys, instruction.ext_params[0]);
+
+    TGX_PROFILE_END(MOVAR32MR32_R32, 0x0103);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLGER32):
-    TGX_PROFILE_CALL(CALLGER32, 0x0105);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLGER32, 0x0105);
+    TGX_CASE(MOVAR32MR32_R64):
+    TGX_PROFILE_CALL(MOVAR32MR32_R64, 0x0104);
+
+    MEMACCESS(uint64_t, sys,
+                REG32(sys, instruction.params[0]) - REG32(sys, instruction.params[1])) = REG64(sys, instruction.ext_params[0]);
+
+    TGX_PROFILE_END(MOVAR32MR32_R64, 0x0104);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLGEC32):
-    TGX_PROFILE_CALL(CALLGEC32, 0x0106);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLGEC32, 0x0106);
+    TGX_CASE(MOVAR32MR32_RF32):
+    TGX_PROFILE_CALL(MOVAR32MR32_RF32, 0x0105);
+
+    MEMACCESS(float, sys,
+                REG32(sys, instruction.params[0]) - REG32(sys, instruction.params[1])) = REGF32(sys, instruction.ext_params[0]);
+
+    TGX_PROFILE_END(MOVAR32MR32_RF32, 0x0105);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLLER32):
-    TGX_PROFILE_CALL(CALLLER32, 0x0107);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLLER32, 0x0107);
+    TGX_CASE(MOVR8_AR32MR32):
+    TGX_PROFILE_CALL(MOVR8_AR32MR32, 0x0106);
+
+    REG8(sys, instruction.params[0]) = MEMACCESS(uint8_t, sys,
+        REG32(sys, instruction.params[1]) - REG32(sys, instruction.ext_params[0]));
+
+    TGX_PROFILE_END(MOVR8_AR32MR32, 0x0106);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLLEC32):
-    TGX_PROFILE_CALL(CALLLEC32, 0x0108);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLLEC32, 0x0108);
+    TGX_CASE(MOVR16_AR32MR32):
+    TGX_PROFILE_CALL(MOVR16_AR32MR32, 0x0107);
+
+    REG16(sys, instruction.params[0]) = MEMACCESS(uint16_t, sys,
+            REG32(sys, instruction.params[1]) - REG32(sys, instruction.ext_params[0]));
+
+    TGX_PROFILE_END(MOVR16_AR32MR32, 0x0107);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLNER32):
-    TGX_PROFILE_CALL(CALLNER32, 0x0109);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLNER32, 0x0109);
+    TGX_CASE(MOVR32_AR32MR32):
+    TGX_PROFILE_CALL(MOVR32_AR32MR32, 0x0108);
+
+    REG32(sys, instruction.params[0]) = MEMACCESS(uint32_t, sys,
+            REG32(sys, instruction.params[1]) - REG32(sys, instruction.ext_params[0]));
+
+    TGX_PROFILE_END(MOVR32_AR32MR32, 0x0108);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
 
 
 
-    TGX_CASE(CALLNEC32):
-    TGX_PROFILE_CALL(CALLNEC32, 0x010A);
-//#error "Not Implemented"
-    TGX_PROFILE_END(CALLNEC32, 0x010A);
+    TGX_CASE(MOVR64_AR32MR32):
+    TGX_PROFILE_CALL(MOVR64_AR32MR32, 0x0109);
+
+    REG64(sys, instruction.params[0]) = MEMACCESS(uint64_t, sys,
+        REG32(sys, instruction.params[1]) - REG32(sys, instruction.ext_params[0]));
+
+    TGX_PROFILE_END(MOVR64_AR32MR32, 0x0109);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
-*/
+
+
+
+    TGX_CASE(MOVRF32_AR32MR32):
+    TGX_PROFILE_CALL(MOVRF32_AR32MR32, 0x010A);
+
+    REGF32(sys, instruction.params[0]) = MEMACCESS(float, sys,
+            REG32(sys, instruction.params[1]) - REG32(sys, instruction.ext_params[0]));
+
+    TGX_PROFILE_END(MOVRF32_AR32MR32, 0x010A);
+    TGX_NEXT_INSTR(*sys);
+    TGX_DISPATCH(_jTable, instruction, *sys);
+
 
 
     TGX_CASE(RET):
@@ -4248,7 +4346,7 @@ static int ParseReg(const char** ptr) {
     if (a == 's' && b == 'h') return SH;
     if (a == 's' && b == 'p') return SP;
     if (a == 'm' && b == '0') return M0;
-    if (a == 'm' && b == '1') return M0;
+    if (a == 'm' && b == '1') return M1;
     if (a == 'x' && b == '0') return X0;
     if (a == 'x' && b == '1') return X1;
     if (a == 'x' && b == '2') return X2;
@@ -4457,11 +4555,12 @@ static const char* RegF32_Names[] = {
     "fx3", "fy3", "fz3", "fw3",
 };
 
-static void fPrintParam(FILE* f, uint32_t type, Instruction* inst, int index) {
+// returns if the index should be incremented
+static int fPrintParam(FILE* f, uint32_t type, Instruction* inst, int index) {
     switch (type) {
         default:
         case PARAM_TYPE_None:
-            return;
+            return 0;
         case PARAM_TYPE_R32:
             if (index < 2) {
                 fprintf(f, "%s ", Reg32_Names[inst->params[index]]);
@@ -4469,7 +4568,7 @@ static void fPrintParam(FILE* f, uint32_t type, Instruction* inst, int index) {
             else {
                 fprintf(f, "%s ", Reg32_Names[inst->ext_params[index - 2]]);
             }
-            return;
+            return 1;
         case PARAM_TYPE_R16:
             if (index < 2) {
                 fprintf(f, "%s ", Reg16_Names[inst->params[index]]);
@@ -4477,7 +4576,7 @@ static void fPrintParam(FILE* f, uint32_t type, Instruction* inst, int index) {
             else {
                 fprintf(f, "%s ", Reg16_Names[inst->ext_params[index - 2]]);
             }
-            return;
+            return 1;
         case PARAM_TYPE_R8:
             if (index < 2) {
                 fprintf(f, "%s ", Reg8_Names[inst->params[index]]);
@@ -4485,7 +4584,7 @@ static void fPrintParam(FILE* f, uint32_t type, Instruction* inst, int index) {
             else {
                 fprintf(f, "%s ", Reg8_Names[inst->ext_params[index - 2]]);
             }
-        return;
+        return 1;
         case PARAM_TYPE_R64:
             if (index < 2) {
                 fprintf(f, "%s ", Reg64_Names[inst->params[index]]);
@@ -4493,7 +4592,7 @@ static void fPrintParam(FILE* f, uint32_t type, Instruction* inst, int index) {
             else {
                 fprintf(f, "%s ", Reg64_Names[inst->ext_params[index - 2]]);
             }
-        return;
+        return 1;
         case PARAM_TYPE_R64H:
             if (index < 2) {
                 fprintf(f, "%s ", Reg64H_Names[inst->params[index]]);
@@ -4501,7 +4600,7 @@ static void fPrintParam(FILE* f, uint32_t type, Instruction* inst, int index) {
             else {
                 fprintf(f, "%s ", Reg64H_Names[inst->ext_params[index - 2]]);
             }
-        return;
+        return 1;
         case PARAM_TYPE_R64L:
             if (index < 2) {
                 fprintf(f, "%s ", Reg64L_Names[inst->params[index]]);
@@ -4509,7 +4608,7 @@ static void fPrintParam(FILE* f, uint32_t type, Instruction* inst, int index) {
             else {
                 fprintf(f, "%s ", Reg64L_Names[inst->ext_params[index - 2]]);
             }
-        return;
+        return 1;
         case PARAM_TYPE_F32:
             if (index < 2) {
                 fprintf(f, "%s ", RegF32_Names[inst->params[index]]);
@@ -4517,10 +4616,10 @@ static void fPrintParam(FILE* f, uint32_t type, Instruction* inst, int index) {
             else {
                 fprintf(f, "%s ", RegF32_Names[inst->ext_params[index - 2]]);
             }
-        return;
+        return 1;
         case PARAM_TYPE_Table:
             fprintf(f, "tbl ");
-            return;
+            return 0;
         case PARAM_TYPE_RVec:
             if (index < 2) {
                 fprintf(f, "%s ", RegVec_Names[inst->params[index]]);
@@ -4528,7 +4627,7 @@ static void fPrintParam(FILE* f, uint32_t type, Instruction* inst, int index) {
             else {
                 fprintf(f, "%s ", RegVec_Names[inst->ext_params[index - 2]]);
             }
-        return;
+        return 1;
         case PARAM_TYPE_DeR32:
             if (index < 2) {
                 fprintf(f, "[%s] ", Reg32_Names[inst->params[index]]);
@@ -4536,22 +4635,32 @@ static void fPrintParam(FILE* f, uint32_t type, Instruction* inst, int index) {
             else {
                 fprintf(f, "[%s] ", Reg32_Names[inst->ext_params[index - 2]]);
             }
-        return;
+        return 1;
         case PARAM_TYPE_Imm:
             fprintf(f, "%d (0x%08X | %f)", inst->const_i32, inst->const_i32, inst->const_f32);
-            return;
+            return 0;
         case PARAM_TYPE_Size8:
-            fprintf(f, "i8 ");
-            return;
+            if (0x00F7 <= inst->opcode && inst->opcode <= 0x010A) {
+                fprintf(f, "+");
+            }
+            else {
+                fprintf(f, "i8 ");
+            }
+            return 0;
         case PARAM_TYPE_Size16:
-            fprintf(f, "i16 ");
-            return;
+            if (0x00F7 <= inst->opcode && inst->opcode <= 0x010A) {
+                fprintf(f, "-");
+            }
+            else {
+                fprintf(f, "i16 ");
+            }
+            return 0;
         case PARAM_TYPE_Size32:
             fprintf(f, "i32 ");
-            return;
+            return 0;
         case PARAM_TYPE_Size64:
             fprintf(f, "i64 ");
-            return;
+            return 0;
     }
 }
 
@@ -4586,8 +4695,7 @@ static void fPrintParamIDs(FILE *f, Mnemonic* spec, Instruction *inst){
     beg = params;
     int index = 0;
     while (*beg) {
-        fPrintParam(f, *beg, inst, index);
-        index++;
+        index += fPrintParam(f, *beg, inst, index);
         beg++;
     }
     fprintf(f, "\n");

@@ -1,6 +1,5 @@
 #include "TGX.h"
 
-#include <time.h>
 
 int load_rom(TGXContext* context, size_t *length);
 
@@ -69,26 +68,39 @@ int main(int argc, char** argv) {
             break;
         }
 
+        printf("Signaling Graphics Shutdown...");
+
         context.GU.shutdown_flag = true;
         TriggerGraphics(&context.GU);
         SDL_WaitThread(context.GU.thread, NULL);
 
+        printf("done.\n");
+
         SDL_DestroyMutex(context.GU.mutex);
         SDL_DestroyCond(context.GU.cond);
+
+        printf("Shutting down\n");
 
         if (context.ExitCode == TGX_EXIT_CODE_RESTART) {
             free_principle_memory(&context.Memory);
             destroy_graphics_thread(&context.GU);
             destroy_program_thread(&context.PU);
 
+            /*context.GU.shutdown_flag = false;
             context.ExitCode = TGX_EXIT_CODE_NONE;
+            */
+
+            context = (TGXContext){0};
+
             printf("Restarting Machine\n");
             continue;
         }
         break;
     } while (true);
 
-    fclose(context.debug_trace);
+    if (context.debug_trace != NULL) {
+        fclose(context.debug_trace);
+    }
 
     return 0;
 }

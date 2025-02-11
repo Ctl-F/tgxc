@@ -427,3 +427,27 @@ gqpf > 0x011D
 gqpe > 0x011E
 
 trace Imm > 0x00A1
+
+# + is being spoofed as a size8
+# - is being spoofed as a size16
+mov DeR32 Size8 R32 R8 > 0x00F7
+mov DeR32 Size8 R32 R16 > 0x00F8
+mov DeR32 Size8 R32 R32 > 0x00F9
+mov DeR32 Size8 R32 R64 > 0x00FA
+mov DeR32 Size8 R32 F32 > 0x00FB
+mov R8 DeR32 Size8 R32 > 0x00FC
+mov R16 DeR32 Size8 R32 > 0x00FD
+mov R32 DeR32 Size8 R32 > 0x00FE
+mov R64 DeR32 Size8 R32 > 0x00FF
+mov F32 DeR32 Size8 R32 > 0x0100
+
+mov DeR32 Size16 R32 R8 > 0x0101
+mov DeR32 Size16 R32 R16 > 0x0102
+mov DeR32 Size16 R32 R32 > 0x0103
+mov DeR32 Size16 R32 R64 > 0x0104
+mov DeR32 Size16 R32 F32 > 0x0105
+mov R8 DeR32 Size16 R32 > 0x0106
+mov R16 DeR32 Size16 R32 > 0x0107
+mov R32 DeR32 Size16 R32 > 0x0108
+mov R64 DeR32 Size16 R32 > 0x0109
+mov F32 DeR32 Size16 R32 > 0x010A
