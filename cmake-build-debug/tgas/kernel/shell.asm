@@ -1,4 +1,5 @@
 #include "../tgstd/stddef.tdef"
+#include "../tgstd/stdgfx.tdef"
 $section meta
 @export shell_init
 @export shell_start
@@ -39,83 +40,83 @@ set_clear_color_pbuffer_end:
 
 quit_event_triggered: i8 0
 
+debug_i32: str "%d\n"
+
 $section prog
 init_graphics_test:
     push jr;
+    trace 0
 
     break;
 
     gqr;
 
     ; initialize system
-    mov ra, 0x00010000;
-    mov m0h, ra;
-    mov ra, window_title;
-    mov rb, title_ptr;
-    mov [rb], ra;
-    mov ra, initialize_system_pbuffer_begin;
-    mov m1h, ra;
-    mov ra, initialize_system_pbuffer_end;
-    mov m1l, ra;
-    gqai;
+    GFX_RECORD_INIT_WINDOW(initialize_system_pbuffer_begin, initialize_system_pbuffer_end)
+    GFX_RECORD_SET_CLEAR_COLOR(set_clear_color_pbuffer_begin, set_clear_color_pbuffer_end)
+    GFX_RECORD_CLEAR()
+    GFX_RECORD_EOF()
 
-    ; set clear color
-    mov ra, 0x00030000;
-    mov m0h, ra;
-    mov ra, set_clear_color_pbuffer_begin;
-    mov m1h, ra;
-    mov ra, set_clear_color_pbuffer_end;
-    mov m1l, ra;
-    gqai;
-
-    ; clear
-    mov ra, 0x00040000;
-    mov m0h, ra;
-    gqai;
-
-    mov ra, 0xFFFFFFFF;
-    mov m0h, ra;
-    gqai;
+    trace 4;
 
     gqs;
 
-    ; wait for this to finish
-sync_loop_beg:
-    gqps;
-    jnz sync_loop_beg;
+    trace 20;
 
-    ;; TODO: Error checking
+    GFX_AWAIT_GPU()
+
+    trace 50
+
+    GFX_RECORD_PRESENT()
+
+    trace 100
+
+    mov ra, 0x00000007;
+    mov m0h, ra;
+    mov ra, quit_event_triggered;
+    mov m1l, ra;
+    gqai;
+
+    trace 200
+
+    GFX_RECORD_EOF()
+    xor rb, rb;
+
+    trace 300
+
     ; dummy eventloop
 event_loop_beg:
     gqr;
-    mov ra, 0x00050000;
-    mov m0h, ra;
-    gqai;
-
-    mov ra, 0x00070000;
-    mov m0h, ra;
-    mov ra, quit_event_triggered;
-    mov m1h, ra;
-    gqai;
-
     gqs;
+    GFX_AWAIT_GPU()
+
+    trace 400
 
     mov ra, quit_event_triggered;
-    mov ras, [ra];
-    cmp ras, 0;
+    mov rbs, [ra];
+    cmp rbs, 0;
+    trace 500
     jz event_loop_beg;
 event_loop_end:
+    trace 1;
+    GFX_RECORD_FREE_WINDOW()
+    GFX_RECORD_EOF()
 
-    mov ra, 0x00020000;
-    mov m0h, ra;
-    gqai;
-
+    trace 2;
     gqs;
-
+    GFX_AWAIT_GPU()
+    trace 3;
     pop jr;
     ret;
 
 
+;sync_loop:
+;    push jr;
+;sync_loop_beg:
+;    gqps;
+;    jnz sync_loop_beg;
+;    pop jr;
+;    ret;
 
 shell_init:
     push jr;

@@ -19,7 +19,7 @@ struct string_view {
     const char* begin;
     const char* end;
 };
-
+/*
 enum class Command {
     Undefined,
     Abs, Acos, Add, And, Asin, Atan, Atan2,
@@ -42,7 +42,7 @@ enum class Command {
     Tsto, Tld, Tan,
     Vnorm, Vadd, Vsub, Vmul, Vdiv, Vdot, Vlen, Vswz,
     Xor,
-};
+};*/
 
 enum class RegisterID {
     RA, RB, RC, RD, RE, RF, RW, RX, RY, RZ,
@@ -167,7 +167,7 @@ static RegisterInfo s_RegisterTable[static_cast<size_t>(RegisterID::REGCOUNT)] {
     { .id = RegisterID::VE2, .type = Type::Vec, .width = 16, .generalPurpose = true, .sysAuto = false, .emitID = 2 },
     { .id = RegisterID::VE3, .type = Type::Vec, .width = 16, .generalPurpose = true, .sysAuto = false, .emitID = 3 },
 };
-
+/*
 static std::unordered_map<char, std::vector<std::string>> s_Commands = {
     {'a', { "abs", "acos", "and", "asin", "atan2", "atan", "add" }},
     {'b', { "bcosmxd", "bsinmxd", "btanmxd", "break", }},
@@ -248,7 +248,7 @@ static std::unordered_map<Command, std::string> s_CommandNames = {
     {Command::Vlen, "vlen"},       {Command::Vswz, "vswz"},       {Command::Xor, "xor"},
     {Command::Gqps, "gqps"}, {Command::Gqs, "gqs"}, {Command::Gqai, "gqai"}, { Command::Gqr, "gqr"},
     {Command::Gqsi, "gqsi"}, {Command::Gqpc, "gqpc"}, {Command::Gqpf, "gqpf"}, {Command::Gqpe, "gqpe"},
-};
+};*/
 
 
 static std::unordered_map<std::string, RegisterID> s_RegisterMap = {
@@ -1338,6 +1338,12 @@ std::string preprocess_input(const char *filename) {
 
     if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
         throw std::runtime_error("Preprocessing failed with an error.");
+    }
+
+    for (size_t i=0; i<bytes.size(); i++) {
+        if (bytes[i] == '|') {
+            bytes[i] = '\n';
+        }
     }
 
     return { bytes.begin(), bytes.end() };

@@ -347,7 +347,7 @@ for a true += then the [DEST] and [SOURCE0] will be set to the same index.
 0x009F 0x5A Reg16 &= Reg16
 0x00A0 0x5B Reg64 &= Reg64
 
-0x00A1 <<<< MISSING (NOP) for now
+0x00A1 trace Const32
 
 0x00A2 0x5C Reg32 ^= Reg32
 0x00A3 0x5E Reg8  ^= Reg8

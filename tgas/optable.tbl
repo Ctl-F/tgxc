@@ -425,3 +425,5 @@ gqsi R32 R32 > 0x011B
 gqpc > 0x011C
 gqpf > 0x011D
 gqpe > 0x011E
+
+trace Imm > 0x00A1

@@ -8,7 +8,7 @@ $section prog
 ENTRY:
 
     jmp shell_init;
-    jmp shell_start;
+    ;jmp shell_start;
     hlt;
 
 #include "shell.asm"

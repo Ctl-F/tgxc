@@ -30,13 +30,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <pthread.h>
+#include <SDL2/SDL_thread.h>
 
-#ifdef __cplusplus
-#include <atomic>
-#else
-#include <stdatomic.h>
-#endif
+
 
 #define TGX_ENUM int
 
@@ -229,10 +225,8 @@ typedef struct {
 #define GPU_ERR_STACK_OVERFLOW 0x03
 
 typedef struct {
-	pthread_mutex_t mutex;
-	pthread_cond_t cond;
+
 	GraphicsContext context;
-	pthread_t thread;
 	void* command_buffer_begin;
 	void* command_buffer_end;
 	void* command_buffer_cursor;
@@ -244,11 +238,11 @@ typedef struct {
 	void* error_buffer_end;
 	void* error_buffer_cursor;
 	void* memory_begin;
-#ifdef __cplusplus
-	std::atomic<bool> ready;
-#else
-	_Atomic bool ready; // active == !ready
-#endif
+	bool ready;
+	bool shutdown_flag;
+	SDL_mutex* mutex;
+	SDL_cond* cond;
+	SDL_Thread* thread;
 } GraphicsThread;
 
 typedef uint32_t(*TGX_swi_handler)(void* tgxContext, uint32_t code);
@@ -259,6 +253,7 @@ typedef struct {
     PrincipleMemory Memory;
 	TGX_swi_handler SWIFunc;
 	int ExitCode;
+	FILE* debug_trace;
 } TGXContext;
 
 typedef struct {
@@ -286,5 +281,8 @@ int init_graphics_thread(GraphicsThread*, PrincipleMemory* memBase);
 void destroy_graphics_thread(GraphicsThread*);
 
 int program_thread_exec(TGXContext*);
+
+void TriggerGraphics(GraphicsThread* gu);
+void fPrintInst(FILE* f, Instruction* inst);
 
 #endif //TGX_H

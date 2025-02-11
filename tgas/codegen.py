@@ -84,6 +84,12 @@ def process(input_file, output_file):
 
     header_str = ["#ifdef INCLUDE_DATA_TABLE"]
 
+    header_str.append("enum class Command { Undefined, ")
+    for pneumonic in pneumonics:
+        header_str.append("%s," % pneumonic.capitalize())
+    header_str.append("};")
+
+
     mask = int("1" * mask_width, 2)
     bits = "0b%s" % ("1" * mask_width)
     header_str.append("#define PARAM_TYPE_MASK %s" % bits)
@@ -150,6 +156,30 @@ def process(input_file, output_file):
         header_str.append(" { \"%s\", &%s_ParamTable }," % (pneumonic, pneumonic))
 
     header_str.append("};\n")
+
+
+    header_str.append("static std::unordered_map<char, std::vector<std::string>> s_Commands = {")
+    grouped = {}
+    for pneumonic in pneumonics:
+        if not pneumonic[0] in grouped:
+            grouped[pneumonic[0]] = [ pneumonic ]
+        else:
+            grouped[pneumonic[0]].append(pneumonic)
+
+    for group in grouped:
+        header_str.append("    { '%s', { %s } }," % (group, ", ".join(["\"%s\"" % item for item in grouped[group]])))
+
+    header_str.append("};")
+
+    header_str.append("static std::unordered_map<std::string, Command> s_CommandIDs = {")
+    for pneumonic in pneumonics:
+        header_str.append(" { \"%s\", Command::%s }, " % (pneumonic, pneumonic.capitalize()))
+    header_str.append("};")
+
+    header_str.append("static std::unordered_map<Command, std::string> s_CommandNames = {")
+    for pneumonic in pneumonics:
+        header_str.append(" { Command::%s, \"%s\" }, " % (pneumonic.capitalize(), pneumonic))
+    header_str.append("};")
 
     header_str.append("#endif //INCLUDE_DATA_TABLE")
 

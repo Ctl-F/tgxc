@@ -70,12 +70,9 @@ void destroy_program_thread(ProgramThread* pu){
 
 }
 
-void* GraphicsMain(void* arg);
-void TriggerGraphics(GraphicsThread* gu);
+int GraphicsMain(void* arg);
 
 int init_graphics_thread(GraphicsThread* gu, PrincipleMemory* memBase){
-    pthread_create(&gu->thread, NULL, GraphicsMain, &gu);
-
     gu->command_buffer_begin = memBase->graphics_queue_begin;
     gu->command_buffer_end = memBase->graphics_queue_end;
     gu->command_buffer_cursor = gu->command_buffer_begin;
@@ -88,6 +85,10 @@ int init_graphics_thread(GraphicsThread* gu, PrincipleMemory* memBase){
     gu->error_buffer_begin = gu->error_buffer_cursor = gu->error_buffer_end = NULL;
 
     gu->memory_begin = memBase->memory_begin;
+
+    gu->mutex = SDL_CreateMutex();
+    gu->cond = SDL_CreateCond();
+    gu->thread = SDL_CreateThread(GraphicsMain, "TGX-GU", gu);
 
     return TGX_SUCCESS;
 }
@@ -119,25 +120,34 @@ void GraphicsTriggerError(GraphicsThread* gu, uint8_t code) {
     (uint8_t*)gu->command_buffer_cursor++;
 }
 
-void* GraphicsMain(void* arg) {
+int GraphicsMain(void* arg) {
     GraphicsThread *gu = arg;
 
     while (1) {
-        pthread_mutex_lock(&gu->mutex);
+        SDL_LockMutex(gu->mutex);
+
         while (!gu->ready) {
-            pthread_cond_wait(&gu->cond, &gu->mutex);
+            SDL_CondWait(gu->cond, gu->mutex);
         }
-        pthread_mutex_unlock(&gu->mutex);
+        bool shutdown = gu->shutdown_flag;
+        SDL_UnlockMutex(gu->mutex);
+
+        if (shutdown) {
+            break;
+        }
 
         WideGraphicsInstruction* buffer = gu->command_buffer_begin;
-        while (buffer < (WideGraphicsInstruction*)gu->graphics_cache_end) {
-            if (buffer->instruction & 0xFFFFFFFF00000000) {
+        while (buffer < (WideGraphicsInstruction*)gu->command_buffer_end) {
+
+            uint32_t instruction = (uint32_t)((buffer->instruction & 0xFFFFFFFF00000000) >> 32);
+
+            if (instruction == 0xFFFFFFFF) {
                 break;
             }
 
-            switch ((buffer->instruction & 0xFFFF000000000000) >> 48) {
-                case 0x0000: break;
-                case 0x0001: {
+            switch (instruction) {
+                case 0x00000000: break;
+                case 0x00000001: {
                     // initialize host window
                     if (SDL_Init(SDL_INIT_VIDEO != 0)) {
                         GraphicsTriggerError(gu, GPU_ERR_INIT);
@@ -171,11 +181,11 @@ void* GraphicsMain(void* arg) {
                     gu->context.appsurf = SDL_GetWindowSurface(gu->context.window);
                     break;
                 }
-                case 0x0002: {
+                case 0x00000002: {
                     SDL_DestroyWindow(gu->context.window);
                     break;
                 }
-                case 0x0003: {
+                case 0x00000003: {
                     uint8_t *param_buffer = gu->memory_begin + buffer->param_buffer_begin;
 
                     *(uint8_t*)GLOC_CLEAR_COLOR_RED(gu->graphics_cache_begin) = *param_buffer++;
@@ -183,7 +193,7 @@ void* GraphicsMain(void* arg) {
                     *(uint8_t*)GLOC_CLEAR_COLOR_BLUE(gu->graphics_cache_begin) = *param_buffer++;
                     break;
                 }
-                case 0x0004: {
+                case 0x00000004: {
                     if (gu->context.window == NULL) {
                         GraphicsTriggerError(gu, GPU_ERR_NULL_DISPLAY);
                         break;
@@ -198,7 +208,7 @@ void* GraphicsMain(void* arg) {
                         *(uint8_t*)GLOC_CLEAR_COLOR_BLUE(gu->graphics_cache_begin)));
                     break;
                 }
-                case 0x0005: {
+                case 0x00000005: {
                     if (gu->context.window == NULL) {
                         GraphicsTriggerError(gu, GPU_ERR_NULL_DISPLAY);
                         break;
@@ -207,13 +217,13 @@ void* GraphicsMain(void* arg) {
                     SDL_UpdateWindowSurface(gu->context.window);
                     break;
                 }
-                case 0x0006: {
+                case 0x00000006: {
                     gu->error_buffer_begin = gu->memory_begin + buffer->param_buffer_begin;
                     gu->error_buffer_end = gu->memory_begin + buffer->param_buffer_end;
                     gu->error_buffer_cursor = gu->error_buffer_begin;
                     break;
                 }
-                case 0x0007: {
+                case 0x00000007: {
                     uint8_t* result = (uint8_t*)(gu->memory_begin + buffer->param_buffer_begin);
 
                     SDL_Event event;
@@ -233,18 +243,19 @@ void* GraphicsMain(void* arg) {
             buffer++;
         }
 
-
+        SDL_LockMutex(gu->mutex);
         gu->ready = false;
+        SDL_UnlockMutex(gu->mutex);
     }
 
-    return NULL;
+    return 0;
 }
 
 void TriggerGraphics(GraphicsThread* gu) {
-    pthread_mutex_lock(&gu->mutex);
+    SDL_LockMutex(gu->mutex);
     gu->ready = true;
-    pthread_cond_signal(&gu->cond);
-    pthread_mutex_unlock(&gu->mutex);
+    SDL_CondSignal(gu->cond);
+    SDL_UnlockMutex(gu->mutex);
 }
 
 
@@ -268,6 +279,9 @@ typedef struct {
     const char* name;
     uint64_t calls;
     uint64_t total_time;
+    int32_t delta_reg32[REG32_COUNT];
+    int64_t delta_reg64[REG64_COUNT];
+    float delta_f32[REGF32_COUNT];
 } ProfilerEntry_;
 
 static ProfilerEntry_ ProfilerTable_[TGX_OPCODE_COUNT];
@@ -275,13 +289,28 @@ static uint64_t ProfilerTimestamp_Start_, ProfilerTimestamp_End_;
 
 #define TGX_PROFILER_INITIALIZE() for(size_t i=0; i<TGX_OPCODE_COUNT; i++) ProfilerTable_[i] = (ProfilerEntry_){ 0 }
 
-#define TGX_PROFILE_CALL(op, code) ProfilerTable_[code].name = #op; ProfilerTable_[code].calls++; CPU_TICKS(ProfilerTimestamp_Start_);
-#define TGX_PROFILE_END(op, code) CPU_TICKS(ProfilerTimestamp_End_); ProfilerTable_[code].total_time += ProfilerTimestamp_End_ - ProfilerTimestamp_Start_;
+#define TGX_PROFILE_CALL(op, code) ProfilerTable_[code].name = #op; \
+    ProfilerTable_[code].calls++; \
+    CPU_TICKS(ProfilerTimestamp_Start_); \
+    for(int i=0; i<REG32_COUNT; i++) ProfilerTable_[code].delta_reg32[i] = (int32_t)sys->PU.gp32[i].full; \
+    for(int i=0; i<REG64_COUNT; i++) ProfilerTable_[code].delta_reg64[i] = (int32_t)sys->PU.gp64[i].full; \
+    for(int i=0; i<REGF32_COUNT; i++) ProfilerTable_[code].delta_f32[i] = sys->PU.f32[i];
+
+#define TGX_PROFILE_END(op, code) CPU_TICKS(ProfilerTimestamp_End_); \
+    ProfilerTable_[code].total_time += ProfilerTimestamp_End_ - ProfilerTimestamp_Start_; \
+    for(int i=0; i<REG32_COUNT; i++) ProfilerTable_[code].delta_reg32[i] = (int32_t)sys->PU.gp32[i].full - ProfilerTable_[code].delta_reg32[i]; \
+    for(int i=0; i<REG64_COUNT; i++) ProfilerTable_[code].delta_reg64[i] = (int32_t)sys->PU.gp64[i].full - ProfilerTable_[code].delta_reg64[i]; \
+    for(int i=0; i<REGF32_COUNT; i++) ProfilerTable_[code].delta_f32[i] = sys->PU.f32[i] - ProfilerTable_[code].delta_f32[i];
 
 #define TGX_PROFILE_REPORT(file) do { FILE *__pfr = fopen(file, "w");  \
     if(__pfr != NULL) { \
         for(size_t i=0; i<TGX_OPCODE_COUNT; i++) { \
-            fprintf(__pfr, "%15s[%4lX]| Calls, Total Time, Avg Time: %9lu, %9lu, %f\n", ProfilerTable_[i].name, i, ProfilerTable_[i].calls, ProfilerTable_[i].total_time, (float)ProfilerTable_[i].total_time / (float)ProfilerTable_[i].calls); \
+            fprintf(__pfr, "%15s[%4lX]| Calls, Total Time, Avg Time: %9lu, %9lu, %f\n\t", ProfilerTable_[i].name, i, ProfilerTable_[i].calls, ProfilerTable_[i].total_time, (float)ProfilerTable_[i].total_time / (float)ProfilerTable_[i].calls); \
+            for(size_t j=0; j<REG32_COUNT; j++){ if(ProfilerTable_[i].delta_reg32[j] != 0) { fprintf(__pfr, "i32-%2lu: %8X ", j, ProfilerTable_[i].delta_reg32[j]); } } \
+            fprintf(__pfr, "\n\t"); \
+            for(size_t j=0; j<REG64_COUNT; j++){ if(ProfilerTable_[i].delta_reg32[i] != 0) { fprintf(__pfr, "i64-%2lu: %16lX ", j, ProfilerTable_[i].delta_reg64[j]); } } \
+            fprintf(__pfr, "\n\t"); \
+            for(size_t j=0; j<REGF32_COUNT; j++){ if(ProfilerTable_[i].delta_f32[i] != 0) { fprintf(__pfr, "f32-%2lu: %f ", j, ProfilerTable_[i].delta_f32[j]); } } \
         } \
         fclose(__pfr); \
     } } while(false)
@@ -388,7 +417,7 @@ int program_thread_exec(TGXContext* sys){
 /* 0x0095 */        TGX_ADDR(LORR32_R32),        TGX_ADDR(LORR8_R8),       TGX_ADDR(LORR16_R16),     TGX_ADDR(LORR64_R64),
 /* 0x0099 */        TGX_ADDR(LNOTR32_R32),       TGX_ADDR(LNOTR8_R8),      TGX_ADDR(LNOTR16_R16),    TGX_ADDR(LNOTR64_R64),
 /* 0x009D */        TGX_ADDR(ANDR32_R32),        TGX_ADDR(ANDR8_R8),       TGX_ADDR(ANDR16_R16),     TGX_ADDR(ANDR64_R64),
-/* 0x00A1 */        TGX_ADDR(NOP),
+/* 0x00A1 */        TGX_ADDR(TRACE),
 /* 0x00A2 */        TGX_ADDR(XORR32_R32),        TGX_ADDR(XORR8_R8),       TGX_ADDR(XORR16_R16),     TGX_ADDR(XORR64_R64),
 /* 0x00A6 */        TGX_ADDR(ORR32_R32),         TGX_ADDR(ORR8_R8),        TGX_ADDR(ORR16_R16),      TGX_ADDR(ORR64_R64),
 /* 0x00AA */        TGX_ADDR(NOTR32_R32),        TGX_ADDR(NOTR8_R8),       TGX_ADDR(NOTR16_R16),     TGX_ADDR(NOTR64_R64),
@@ -2489,14 +2518,20 @@ int program_thread_exec(TGXContext* sys){
 
 
 
-    /*NOP
-    TGX_CASE(MOVR32_R32):
-    TGX_PROFILE_CALL(MOVR32_R32, 0x00A1);
-//#error "Not Implemented"
-    TGX_PROFILE_END(MOVR32_R32, 0x00A1);
+
+    TGX_CASE(TRACE):
+    TGX_PROFILE_CALL(TRACE, 0x00A1);
+    BRANCHING_INSTRUCTION
+
+    if (sys->debug_trace != NULL) {
+        fprintf(sys->debug_trace, "DBT %08X - ", instruction.const_i32);
+        fPrintInst(sys->debug_trace, (Instruction*)(sys->Memory.memory_begin + REG32(sys, REG_IP) + sizeof(Instruction)));
+    }
+
+    TGX_PROFILE_END(TRACE, 0x00A1);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
-    */
+
 
     TGX_CASE(XORR32_R32):
     TGX_PROFILE_CALL(XORR32_R32, 0x00A2);
@@ -3968,10 +4003,14 @@ int program_thread_exec(TGXContext* sys){
     TGX_CASE(GQPS):
     TGX_PROFILE_CALL(GQPS, 0x0117);
 
+
     CLEAR_BIT(REG32(sys, REG_PF), (TGX_PF_Flag_GraphicsFree | TGX_PF_Flag_ZeroBit | TGX_PF_Flag_NegBit));
     // if gu.ready is false it means it's in an active state. If it's true it means it has become inactive
     // we want to be able to do work if the GU is inactive
-    REG32(sys, REG_PF) |= (TGX_PF_Flag_GraphicsFree | TGX_PF_Flag_ZeroBit) * (!sys->GU.ready);
+    SDL_LockMutex(sys->GU.mutex);
+    REG32(sys, REG_PF) |= (TGX_PF_Flag_GraphicsFree | TGX_PF_Flag_ZeroBit) * !sys->GU.ready;
+    SDL_UnlockMutex(sys->GU.mutex);
+
 
     TGX_PROFILE_END(GQPS, 0x0117);
     TGX_NEXT_INSTR(*sys);
@@ -4003,6 +4042,8 @@ int program_thread_exec(TGXContext* sys){
     *(((uint64_t*)sys->GU.command_buffer_cursor) + 0)= REG64(sys, 0);
     *(((uint64_t*)sys->GU.command_buffer_cursor) + 1) = REG64(sys, 1);
 
+    sys->GU.command_buffer_cursor += 2 * sizeof(uint64_t);
+
     TGX_PROFILE_END(GQAI, 0x0119);
     TGX_NEXT_INSTR(*sys);
     TGX_DISPATCH(_jTable, instruction, *sys);
@@ -4012,7 +4053,7 @@ int program_thread_exec(TGXContext* sys){
     TGX_CASE(GQR):
     TGX_PROFILE_CALL(GQR, 0x011A);
 
-    memset(sys->GU.command_buffer_begin, 0, GRAPHICS_QUEUE_SIZE);
+    //memset(sys->GU.command_buffer_begin, 0, GRAPHICS_QUEUE_SIZE);
     sys->GU.command_buffer_cursor = sys->GU.command_buffer_begin;
 
     TGX_PROFILE_END(GQR, 0x011A);
@@ -4416,105 +4457,109 @@ static const char* RegF32_Names[] = {
     "fx3", "fy3", "fz3", "fw3",
 };
 
-static void PrintParam(uint32_t type, Instruction* inst, int index) {
+static void fPrintParam(FILE* f, uint32_t type, Instruction* inst, int index) {
     switch (type) {
         default:
         case PARAM_TYPE_None:
             return;
         case PARAM_TYPE_R32:
             if (index < 2) {
-                printf("%s ", Reg32_Names[inst->params[index]]);
+                fprintf(f, "%s ", Reg32_Names[inst->params[index]]);
             }
             else {
-                printf("%s ", Reg32_Names[inst->ext_params[index - 2]]);
+                fprintf(f, "%s ", Reg32_Names[inst->ext_params[index - 2]]);
             }
             return;
         case PARAM_TYPE_R16:
             if (index < 2) {
-                printf("%s ", Reg16_Names[inst->params[index]]);
+                fprintf(f, "%s ", Reg16_Names[inst->params[index]]);
             }
             else {
-                printf("%s ", Reg16_Names[inst->ext_params[index - 2]]);
+                fprintf(f, "%s ", Reg16_Names[inst->ext_params[index - 2]]);
             }
             return;
         case PARAM_TYPE_R8:
             if (index < 2) {
-                printf("%s ", Reg8_Names[inst->params[index]]);
+                fprintf(f, "%s ", Reg8_Names[inst->params[index]]);
             }
             else {
-                printf("%s ", Reg8_Names[inst->ext_params[index - 2]]);
+                fprintf(f, "%s ", Reg8_Names[inst->ext_params[index - 2]]);
             }
         return;
         case PARAM_TYPE_R64:
             if (index < 2) {
-                printf("%s ", Reg64_Names[inst->params[index]]);
+                fprintf(f, "%s ", Reg64_Names[inst->params[index]]);
             }
             else {
-                printf("%s ", Reg64_Names[inst->ext_params[index - 2]]);
+                fprintf(f, "%s ", Reg64_Names[inst->ext_params[index - 2]]);
             }
         return;
         case PARAM_TYPE_R64H:
             if (index < 2) {
-                printf("%s ", Reg64H_Names[inst->params[index]]);
+                fprintf(f, "%s ", Reg64H_Names[inst->params[index]]);
             }
             else {
-                printf("%s ", Reg64H_Names[inst->ext_params[index - 2]]);
+                fprintf(f, "%s ", Reg64H_Names[inst->ext_params[index - 2]]);
             }
         return;
         case PARAM_TYPE_R64L:
             if (index < 2) {
-                printf("%s ", Reg64L_Names[inst->params[index]]);
+                fprintf(f, "%s ", Reg64L_Names[inst->params[index]]);
             }
             else {
-                printf("%s ", Reg64L_Names[inst->ext_params[index - 2]]);
+                fprintf(f, "%s ", Reg64L_Names[inst->ext_params[index - 2]]);
             }
         return;
         case PARAM_TYPE_F32:
             if (index < 2) {
-                printf("%s ", RegF32_Names[inst->params[index]]);
+                fprintf(f, "%s ", RegF32_Names[inst->params[index]]);
             }
             else {
-                printf("%s ", RegF32_Names[inst->ext_params[index - 2]]);
+                fprintf(f, "%s ", RegF32_Names[inst->ext_params[index - 2]]);
             }
         return;
         case PARAM_TYPE_Table:
-            printf("tbl ");
+            fprintf(f, "tbl ");
             return;
         case PARAM_TYPE_RVec:
             if (index < 2) {
-                printf("%s ", RegVec_Names[inst->params[index]]);
+                fprintf(f, "%s ", RegVec_Names[inst->params[index]]);
             }
             else {
-                printf("%s ", RegVec_Names[inst->ext_params[index - 2]]);
+                fprintf(f, "%s ", RegVec_Names[inst->ext_params[index - 2]]);
             }
         return;
         case PARAM_TYPE_DeR32:
             if (index < 2) {
-                printf("[%s] ", Reg32_Names[inst->params[index]]);
+                fprintf(f, "[%s] ", Reg32_Names[inst->params[index]]);
             }
             else {
-                printf("[%s] ", Reg32_Names[inst->ext_params[index - 2]]);
+                fprintf(f, "[%s] ", Reg32_Names[inst->ext_params[index - 2]]);
             }
         return;
         case PARAM_TYPE_Imm:
-            printf("%d (0x%08X | %f)", inst->const_i32, inst->const_i32, inst->const_f32);
+            fprintf(f, "%d (0x%08X | %f)", inst->const_i32, inst->const_i32, inst->const_f32);
             return;
         case PARAM_TYPE_Size8:
-            printf("i8 ");
+            fprintf(f, "i8 ");
             return;
         case PARAM_TYPE_Size16:
-            printf("i16 ");
+            fprintf(f, "i16 ");
             return;
         case PARAM_TYPE_Size32:
-            printf("i32 ");
+            fprintf(f, "i32 ");
             return;
         case PARAM_TYPE_Size64:
-            printf("i64 ");
+            fprintf(f, "i64 ");
             return;
     }
 }
 
-static void PrintParamIDs(Mnemonic *spec, Instruction* inst) {
+static void PrintParam(uint32_t type, Instruction* inst, int index) {
+    fPrintParam(stdout, type, inst, index);
+}
+
+static void fPrintParamIDs(FILE *f, Mnemonic* spec, Instruction *inst){
     uint32_t params[8] = { 0, 0, 0, 0, 0, 0, 0, 0};
     uint32_t *cursor = params+7;
     uint32_t par = spec->param_id;
@@ -4523,7 +4568,7 @@ static void PrintParamIDs(Mnemonic *spec, Instruction* inst) {
         par >>= PARAM_MASK_WIDTH;
         cursor--;
         if (cursor < params) {
-            printf("Invalid ParamID! Too many parameters detected.\n");
+            fprintf(f, "Invalid ParamID! Too many parameters detected.\n");
             return;
         }
     }
@@ -4541,16 +4586,20 @@ static void PrintParamIDs(Mnemonic *spec, Instruction* inst) {
     beg = params;
     int index = 0;
     while (*beg) {
-        PrintParam(*beg, inst, index);
+        fPrintParam(f, *beg, inst, index);
         index++;
         beg++;
     }
-    printf("\n");
+    fprintf(f, "\n");
 }
 
-static void PrintInst(Instruction* inst) {
+static void PrintParamIDs(Mnemonic *spec, Instruction* inst) {
+    fPrintParamIDs(stdout, spec, inst);
+}
+
+void fPrintInst(FILE *f, Instruction* inst) {
     if ((inst-1)->opcode == 0x0000) {
-        printf("%4u: ", (inst-1)->const_i32);
+        fprintf(f, "%4u: ", (inst-1)->const_i32);
     }
 
     Mnemonic *op = SearchOpCode(inst->opcode);
@@ -4559,12 +4608,16 @@ static void PrintInst(Instruction* inst) {
     if (op == NULL) {
         uint32_t param0 = inst->params[0];
         uint32_t param1 = inst->params[1];
-        printf("[%04X] ??? %02X %02X %08X (%f)\n", opcode, param0, param1, inst->const_i32, inst->const_f32);
+        fprintf(f, "[%04X] ??? %02X %02X %08X (%f)\n", opcode, param0, param1, inst->const_i32, inst->const_f32);
         return;
     }
 
-    printf("[%04X] %s ", opcode, op->name);
-    PrintParamIDs(op, inst);
+    fprintf(f, "[%04X] %s ", opcode, op->name);
+    fPrintParamIDs(f, op, inst);
+}
+
+void PrintInst(Instruction* inst) {
+    fPrintInst(stdout, inst);
 }
 
 static void StepNext(TGXContext* ctx, Instruction* currentInst, int step_into) {
@@ -4786,7 +4839,7 @@ static void PrintReg(TGXContext* ctx, const char* buffer) {
     }
 
     int is_float;
-    uint64_t val = (uint32_t)GetReg(ctx, reg, &is_float);
+    uint64_t val = (uint64_t)GetReg(ctx, reg, &is_float);
 
     if (is_float) {
         printf("%f\n", *(float*)&val);

@@ -2,9 +2,11 @@
 
 #include <time.h>
 
-int load_rom(TGXContext* context);
+int load_rom(TGXContext* context, size_t *length);
 
 uint32_t swi_handler(void* context, uint32_t code);
+
+static bool debug_trace_enabled = false;
 
 int execute(TGXContext *context) {
     if (alloc_principle_memory(&context->Memory) != TGX_SUCCESS) {
@@ -15,7 +17,7 @@ int execute(TGXContext *context) {
     init_program_thread(&context->PU);
     init_graphics_thread(&context->GU, &context->Memory);
 
-    if (load_rom(context) != TGX_SUCCESS) {
+    if (load_rom(context, NULL) != TGX_SUCCESS) {
         return 1;
     }
 
@@ -25,23 +27,54 @@ int execute(TGXContext *context) {
     return 0;
 }
 
-int main(void) {
-    TGXContext context = {
-        .PU = {0},
-        .GU = {
-            .mutex = PTHREAD_MUTEX_INITIALIZER,
-            .cond = PTHREAD_COND_INITIALIZER,
-            .context = {0},
-        },
-        .Memory = {0},
-        .SWIFunc = {0},
-        .ExitCode = TGX_EXIT_CODE_NONE,
-    };
+int main(int argc, char** argv) {
+    TGXContext context = {0};
+
+    if (argc > 1 && strcmp(argv[1], "--dis") == 0) {
+        if (alloc_principle_memory(&context.Memory) != TGX_SUCCESS) {
+            printf("Unable to allocate required memory to start the vm. \n");
+            return 1;
+        }
+
+        size_t length;
+        if (load_rom(&context, &length) != TGX_SUCCESS) {
+            printf("Error loading rom\n");
+            return 1;
+        }
+
+        Instruction* inst = (Instruction*)context.Memory.rom_begin;
+        Instruction* e = (Instruction*)(context.Memory.rom_begin + length);
+
+        FILE *f = fopen("./dis.asm", "w");
+
+        if (f == NULL) {
+            printf("Error opening file for writing, defaulting to stdout.\n");
+            f = stdout;
+        }
+
+        while (inst < e) {
+            fPrintInst(f, inst);
+            inst++;
+        }
+        fclose(f);
+        return 0;
+    }
+
+    if (argc > 1 && strcmp(argv[1], "--trace") == 0) {
+        context.debug_trace = fopen("debug_trace_log.txt", "w");
+    }
 
     do {
         if (execute(&context) != 0) {
             break;
         }
+
+        context.GU.shutdown_flag = true;
+        TriggerGraphics(&context.GU);
+        SDL_WaitThread(context.GU.thread, NULL);
+
+        SDL_DestroyMutex(context.GU.mutex);
+        SDL_DestroyCond(context.GU.cond);
 
         if (context.ExitCode == TGX_EXIT_CODE_RESTART) {
             free_principle_memory(&context.Memory);
@@ -55,12 +88,14 @@ int main(void) {
         break;
     } while (true);
 
+    fclose(context.debug_trace);
+
     return 0;
 }
 // Things officially work. In that the baseline instruction set is good and needs to be tested.
 // Next step is make an assembler and test the instructions
 
-int load_rom(TGXContext* ctx) {
+int load_rom(TGXContext* ctx, size_t *size) {
     FILE *f = fopen("./root/boot/krom", "rb");
     if (!f) {
         perror("Failed to open kernel rom file");
@@ -94,6 +129,10 @@ int load_rom(TGXContext* ctx) {
     }
 
     memcpy(ctx->Memory.rom_begin, buffer, bytes_read);
+
+    if (size != NULL) {
+        *size = file_size;
+    }
 
     free(buffer);
     fclose(f);
