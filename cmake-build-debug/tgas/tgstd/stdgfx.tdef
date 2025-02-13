@@ -8,7 +8,9 @@
 #define GFX_COMMAND_ID_SETCLRC 0x00000003
 #define GFX_COMMAND_ID_CLEAR   0x00000004
 #define GFX_COMMAND_ID_PRESENT 0x00000005
-
+#define GFX_COMMAND_ID_ENABLE_ERRORS 0x00000006
+#define GFX_COMMAND_ID_CLEAR_ERRORS 0x00000007
+#define GFX_COMMAND_ID_FILL_RECT 0x00000008
 #define GFX_COMMAND_ID_EOF     0xFFFFFFFF
 
 #define ____PP_CAT_(a, b) a ## b
@@ -48,6 +50,8 @@
     gqai;
 
 
+#define GFX_INST_SIZE 16
+
 
 #define GFX_AWAIT_GPU() \
 ____PP_CAT_EXP(__SYNC_LOOP_GFX_AWAIT__, __LINE__): |\
@@ -58,13 +62,25 @@ $section meta
 
 @struct gWindowInitParams {
     i32 pWindowTitle;
-    i32 pWindowSize;
+    i32 WindowSize;
 }
 
 @struct gColorRGB {
     i8 r;
     i8 g;
     i8 b;
+}
+
+@struct gRect {
+    i32 x;
+    i32 y;
+    i32 width;
+    i32 height;
+}
+
+@struct gFillRectParams {
+    i32 pRect;
+    i32 pColorRGB;
 }
 
 #endif

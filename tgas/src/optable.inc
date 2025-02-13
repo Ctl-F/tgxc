@@ -75,10 +75,10 @@ Int,
 Syscall,
 Break,
 Gqps,
+Gqsi,
 Gqs,
 Gqai,
 Gqr,
-Gqsi,
 Gqpc,
 Gqpf,
 Gqpe,
@@ -152,8 +152,8 @@ static std::unordered_map<uint32_t, TableEntry> mov_ParamTable {
     { 0x00AB, TableEntry{ 0x0005, nullptr } }, /* DeR32, Imm */
     { 0x0193, TableEntry{ 0x000A, nullptr } }, /* R32, Table, R8 */
     { 0x019B, TableEntry{ 0x0009, nullptr } }, /* R32, Table, Imm */
-    { 0x0913, TableEntry{ 0x0008, HandleMovToTblR8 } }, /* Table, R32, R8 */
-    { 0x091B, TableEntry{ 0x0007, HandleMovToTblC8 } }, /* Table, R32, Imm */
+    { 0x0931, TableEntry{ 0x0008, HandleMovToTblR8 } }, /* Table, R8, R32 */
+    { 0x09B1, TableEntry{ 0x0007, HandleMovToTblC8 } }, /* Table, Imm, R32 */
     { 0x0AAB, TableEntry{ 0x0023, nullptr } }, /* DeR32, DeR32, Imm */
     { 0x0ACB, TableEntry{ 0x0006, nullptr } }, /* DeR32, Size8, Imm */
     { 0x1AC1, TableEntry{ 0x00FE, nullptr } }, /* R32, DeR32, Size8, R32 */
@@ -727,6 +727,10 @@ static std::unordered_map<uint32_t, TableEntry> gqps_ParamTable {
     { 0x0000, TableEntry{ 0x0117, nullptr } }, /*  */
 };
 
+static std::unordered_map<uint32_t, TableEntry> gqsi_ParamTable {
+    { 0x0011, TableEntry{ 0x011B, nullptr } }, /* R32, R32 */
+};
+
 static std::unordered_map<uint32_t, TableEntry> gqs_ParamTable {
     { 0x0000, TableEntry{ 0x0118, nullptr } }, /*  */
 };
@@ -737,10 +741,6 @@ static std::unordered_map<uint32_t, TableEntry> gqai_ParamTable {
 
 static std::unordered_map<uint32_t, TableEntry> gqr_ParamTable {
     { 0x0000, TableEntry{ 0x011A, nullptr } }, /*  */
-};
-
-static std::unordered_map<uint32_t, TableEntry> gqsi_ParamTable {
-    { 0x0011, TableEntry{ 0x011B, nullptr } }, /* R32, R32 */
 };
 
 static std::unordered_map<uint32_t, TableEntry> gqpc_ParamTable {
@@ -835,10 +835,10 @@ static std::unordered_map<std::string, std::unordered_map<uint32_t, TableEntry>*
  { "syscall", &syscall_ParamTable },
  { "break", &break_ParamTable },
  { "gqps", &gqps_ParamTable },
+ { "gqsi", &gqsi_ParamTable },
  { "gqs", &gqs_ParamTable },
  { "gqai", &gqai_ParamTable },
  { "gqr", &gqr_ParamTable },
- { "gqsi", &gqsi_ParamTable },
  { "gqpc", &gqpc_ParamTable },
  { "gqpf", &gqpf_ParamTable },
  { "gqpe", &gqpe_ParamTable },
@@ -865,7 +865,7 @@ static std::unordered_map<char, std::vector<std::string>> s_Commands = {
     { 'e', { "epow" } },
     { 'j', { "jmp", "jz", "jnz", "jgt", "jlt", "jge", "jle" } },
     { 'h', { "hlt" } },
-    { 'g', { "gqps", "gqs", "gqai", "gqr", "gqsi", "gqpc", "gqpf", "gqpe" } },
+    { 'g', { "gqps", "gqsi", "gqs", "gqai", "gqr", "gqpc", "gqpf", "gqpe" } },
 };
 static std::unordered_map<std::string, Command> s_CommandIDs = {
  { "nop", Command::Nop }, 
@@ -943,10 +943,10 @@ static std::unordered_map<std::string, Command> s_CommandIDs = {
  { "syscall", Command::Syscall }, 
  { "break", Command::Break }, 
  { "gqps", Command::Gqps }, 
+ { "gqsi", Command::Gqsi }, 
  { "gqs", Command::Gqs }, 
  { "gqai", Command::Gqai }, 
  { "gqr", Command::Gqr }, 
- { "gqsi", Command::Gqsi }, 
  { "gqpc", Command::Gqpc }, 
  { "gqpf", Command::Gqpf }, 
  { "gqpe", Command::Gqpe }, 
@@ -1028,10 +1028,10 @@ static std::unordered_map<Command, std::string> s_CommandNames = {
  { Command::Syscall, "syscall" }, 
  { Command::Break, "break" }, 
  { Command::Gqps, "gqps" }, 
+ { Command::Gqsi, "gqsi" }, 
  { Command::Gqs, "gqs" }, 
  { Command::Gqai, "gqai" }, 
  { Command::Gqr, "gqr" }, 
- { Command::Gqsi, "gqsi" }, 
  { Command::Gqpc, "gqpc" }, 
  { Command::Gqpf, "gqpf" }, 
  { Command::Gqpe, "gqpe" }, 

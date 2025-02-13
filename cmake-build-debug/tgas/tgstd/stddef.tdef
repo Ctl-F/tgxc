@@ -1,6 +1,10 @@
 #ifndef __STDDEF__
 #define __STDDEF__
 
+#define INPUT_CONTROL_SET_MD    0x00000010
+#define INPUT_CONTROL_SET_HMD   0x00000011
+#define INPUT_CONTROL_POLL      0x00000012
+#define SYSCALL_ENABLE_ERRORS   0x00001000
 #define GET_TIME_MS             0x0000A000
 #define DEBUG_SERIAL_PRINT_REGS 0xF0000000
 #define DEBUG_SERIAL_PRINTF     0xF0000001
@@ -9,6 +13,27 @@
 #define DEBUG_SERIAL_FGETS      0xF0000003
 #define DEBUG_SERIAL_GETCH      0xF0000005
 #define DEBUG_SERIAL_PUTCH      0xF0000006
+
+#define INPUT_MD_DISABLED 0
+#define INPUT_MD_CONTROLLER 1
+#define INPUT_MD_KEYMAP 2
+#define INPUT_MD_KEYBOARD 3
+
+#define INPUT_HMD_DISABLED 0
+#define INPUT_HMD_ENABLED 1
+
+#define SWI_ERR_NONE 0x00000000
+#define SWI_ERR_InvalidInputMode 0x00000001
+#define SWI_ERR_InvalidInputHostMode 0x00000002
+#define SWI_ERR_InvalidSysCode 0x00000003
+
+#define GPU_ERR_NONE 0x00
+#define GPU_ERR_INIT 0x01
+#define GPU_ERR_NULL_DISPLAY 0x02
+#define GPU_ERR_STACK_OVERFLOW 0x03
+#define GPU_ERR_REINIT 0x04
+#define GPU_ERR_UNKNOWN_CMD 0x05
+
 
 #define ROM_BEGIN 0
 #define ROM_END 32768
@@ -27,6 +52,13 @@
 
 #define SHARED_BEGIN 172032
 #define SHARED_END 663552
+
+
+#define INT_TABLE_COUNT 256
+
+#define INT_RES_UNEXPECTED_ERROR 255
+#define INT_RES_GQ_FULL          254
+#define INT_RES_GQ_OVERFLOW      253
 
 #define _XXXX 0x8888
 #define _XXXY 0x8884
@@ -316,5 +348,58 @@
 #define _WWWY 0x1114
 #define _WWWZ 0x1112
 #define _WWWW 0x1111
+
+$section meta
+
+@struct ControllerResultBuffer {
+    i8 left
+    i8 right
+    i8 up
+    i8 down
+    i8 start
+    i8 select
+    i8 A
+    i8 B
+    i8 X
+    i8 Y
+    i8 Lt
+    i8 Rt
+    f32 AxisH
+    f32 AxisV
+}
+
+@struct KeyboardMapping {
+    i32 key_for_left;
+    i32 key_for_right;
+    i32 key_for_up;
+    i32 key_for_down;
+    i32 key_for_start;
+    i32 key_for_select;
+    i32 key_for_a;
+    i32 key_for_b;
+    i32 key_for_x;
+    i32 key_for_y;
+}
+
+@struct KeyboardResultBuffer {
+    f32 mouse_x;
+    f32 mouse_y;
+    i8 mouse_left;
+    i8 mouse_right;
+    i8 mouse_middle;
+    i8 padding;
+    i32 mouse_wheel;
+    i32 pointer_to_keyboard_buffer_current_frame ; (i8[PK_CODE_END]);
+    i32 pointer_to_keyboard_buffer_last_frame ; (i8[PK_CODE_END]);
+}
+
+@struct HostResultBuffer {
+    i8 quit_event;
+    i8 padding1;
+    i8 padding2;
+    i8 padding3;
+    i32 p_TextBuffer;
+    i64 text_buffer_length;
+}
 
 #endif

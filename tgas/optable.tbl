@@ -28,8 +28,8 @@ mov DeR32 Imm > 0x0005
 # Will need to be reordered to fit what the vm expects.
 # Default encoding will be out of order
 mov DeR32 Size8 Imm > 0x0006
-mov Table R32 Imm > 0x0007, HandleMovToTblC8
-mov Table R32 R8 > 0x0008, HandleMovToTblR8
+mov Table Imm R32 > 0x0007, HandleMovToTblC8
+mov Table R8 R32 > 0x0008, HandleMovToTblR8
 mov R32 Table Imm > 0x0009
 mov R32 Table R8 > 0x000A
 
@@ -418,10 +418,10 @@ break > 0x0116, EncodeBreak
 break Imm > 0x0116, EncodeBreak
 
 gqps > 0x0117
+gqsi R32 R32 > 0x011B
 gqs > 0x0118
 gqai > 0x0119
 gqr > 0x011A
-gqsi R32 R32 > 0x011B
 gqpc > 0x011C
 gqpf > 0x011D
 gqpe > 0x011E

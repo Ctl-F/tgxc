@@ -42,6 +42,7 @@ int main(int argc, char** argv) {
         }
 
         Instruction* inst = (Instruction*)context.Memory.rom_begin;
+        Instruction* start = inst;
         Instruction* e = (Instruction*)(context.Memory.rom_begin + length);
 
         FILE *f = fopen("./dis.asm", "w");
@@ -52,6 +53,7 @@ int main(int argc, char** argv) {
         }
 
         while (inst < e) {
+            fprintf(f, "%016lX: ", (size_t)(inst - start));
             fPrintInst(f, inst);
             inst++;
         }
@@ -151,10 +153,235 @@ int load_rom(TGXContext* ctx, size_t *size) {
     return TGX_SUCCESS;
 }
 
+#define POP(type, context) *(type*)(context->Memory.memory_begin + context->PU.gp32[REG_SP].full); context->PU.gp32[REG_SP].full += sizeof(type)
+
+typedef struct {
+    struct {
+        uint32_t mode;
+        void* result_buffer;
+        void* mapping_buffer;
+    } DirectInput;
+    struct {
+        uint32_t mode;
+        void* result_buffer;
+    } HostInput;
+    void* memory_begin;
+} InputContext;
+
+static InputContext s_InputController = (InputContext){0};
+static char* swi_ErrorBuffer = NULL;
+
+static void swi_Error(uint32_t code, const char* message) {
+    if (swi_ErrorBuffer == NULL) return;
+
+    *(uint32_t*)swi_ErrorBuffer = code;
+    memccpy(swi_ErrorBuffer + sizeof(uint32_t), message, '\0', 1024);
+}
+
+void HandleKeyInput(SDL_Event* event) {
+
+    switch (s_InputController.DirectInput.mode) {
+        default:
+        case 0: return;
+
+        case 1: // controller input
+        {
+
+            return;
+        }
+        case 2: // Keyboard Mapped Input
+        {
+            uint32_t *keyboard_map = (uint32_t*)s_InputController.DirectInput.mapping_buffer;
+            uint32_t *result_buffer = (uint32_t*)s_InputController.DirectInput.result_buffer;
+
+            for (int i=0; i<10; i++) {
+                if (event->key.keysym.scancode == keyboard_map[i]) {
+                    result_buffer[i] = event->key.state;
+                    break;
+                }
+            }
+            return;
+        }
+        case 3: // Keyboard Full Input
+        {
+            if (event->key.keysym.scancode >= INPUT_SCAN_CODE_END) return;
+
+            uint32_t p_cFrame;
+            p_cFrame = *(uint32_t*)(s_InputController.DirectInput.result_buffer + 16);
+            uint8_t* currentFrame = s_InputController.memory_begin + p_cFrame;
+            currentFrame[event->key.keysym.scancode] = event->key.state;
+            return;
+        }
+    }
+
+}
+
+void HandleMouseButtonInput(SDL_Event* event) {
+    switch (s_InputController.DirectInput.mode) {
+        default:
+        case 0:
+        case 1: return;
+        case 2: // keyboard mapped input
+        {
+            uint8_t* btn_buffer = (uint8_t*)(s_InputController.DirectInput.result_buffer + 11 * sizeof(uint32_t));
+
+            if (event->button.button == SDL_BUTTON_LEFT) {
+                *btn_buffer = event->button.state;
+            }
+            else {
+                *(btn_buffer+1) = event->button.state;
+            }
+            return;
+        }
+        case 3: {
+            uint8_t* buffer = (uint8_t*)(s_InputController.DirectInput.result_buffer + 8);
+
+            if (event->button.button > 3) return;
+
+            buffer[event->button.button - 1] = event->button.state;
+            return;
+        }
+    }
+}
+
+void HandleMouseMovementInput(SDL_Event* event) {
+    switch (s_InputController.DirectInput.mode) {
+        default:
+        case 0:
+        case 1: return;
+        case 2: // keyboard mapped input
+        {
+            float* btn_buffer = (float*)(s_InputController.DirectInput.result_buffer + 11 * sizeof(uint32_t) + 2);
+
+            *btn_buffer = (float)event->motion.xrel;
+            *(btn_buffer + 1) = (float)event->motion.yrel;
+            return;
+        }
+        case 3: {
+            float* buffer = (float*)s_InputController.DirectInput.result_buffer;
+            *buffer = (float)event->motion.x;
+            *(buffer+1) = (float)event->motion.y;
+            return;
+        }
+    }
+}
+
+void HandleMouseWheelInput(SDL_Event* event) {
+    if (s_InputController.DirectInput.mode != 3) {
+        return;
+    }
+
+    int32_t* buffer = (int32_t*)(s_InputController.DirectInput.result_buffer + 11);
+    *buffer = event->wheel.y;
+}
+
+void HandleTextInput(SDL_Event* event) {
+
+}
+
 uint32_t swi_handler(void* context, uint32_t code) {
     TGXContext* ctx = context;
 
     switch (code) {
+        default: {
+            swi_Error(SWI_ErrorInvalidSysCode, "Unknown syscall code.");
+            return 1;
+        }
+        case 0x00000010: // InputControllerSetMode
+        {
+            uint32_t mode = POP(uint32_t, ctx);
+            s_InputController.DirectInput.mode = mode;
+            if (mode == 0) {
+                return 1;
+            }
+
+            if (mode > 3) {
+                swi_Error(SWI_ErrorInvalidInputMode, "Invalid input mode provided for input controller. Allowed values are 0: Disabled, 1: Controller, 2: KeyboardMapped, 3: KeyboardFull.");
+                return 0;
+            }
+
+            uint32_t pDataBuffer = POP(uint32_t, ctx);
+            s_InputController.DirectInput.result_buffer = ctx->Memory.memory_begin + pDataBuffer;
+            s_InputController.DirectInput.mapping_buffer = NULL;
+            if (mode == 2) {
+                s_InputController.DirectInput.mapping_buffer = ctx->Memory.memory_begin + POP(uint32_t, ctx);
+            }
+            return 1;
+        }
+        case 0x00000011: // InputControllerSetHostMode
+        {
+            uint32_t mode = POP(uint32_t, ctx);
+            s_InputController.HostInput.mode = mode;
+
+            if (mode == 0) {
+                return 1;
+            }
+
+            s_InputController.memory_begin = ctx->Memory.memory_begin;
+
+            if (mode != 1) {
+                swi_Error(SWI_ErrorInvalidInputHostMode, "Invalid host input mode provided for input controller. Allowed values are 0: Disabled, 1: Enabled");
+                return 0;
+            }
+            uint32_t pBuffer = POP(uint32_t, ctx);
+            s_InputController.HostInput.result_buffer = ctx->Memory.memory_begin + pBuffer;
+            return 1;
+        }
+        case 0x00000012: {
+            if (s_InputController.DirectInput.mode == 3) {
+                uint32_t p_cFrame, p_lFrame;
+                p_cFrame = *(uint32_t*)(s_InputController.DirectInput.result_buffer + 16);
+                p_lFrame = *(uint32_t*)(s_InputController.DirectInput.result_buffer + 20);
+
+                uint8_t* currentFrame = s_InputController.memory_begin + p_cFrame;
+                uint8_t* lastFrame = s_InputController.memory_begin + p_lFrame;
+
+                memcpy(lastFrame, currentFrame, INPUT_SCAN_CODE_END);
+            }
+
+
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                switch (event.type) {
+                    case SDL_QUIT:
+                        if (s_InputController.HostInput.mode) {
+                            *(uint8_t*)s_InputController.HostInput.result_buffer = 1;
+                        }
+                        break;
+                    case SDL_KEYUP:
+                    case SDL_KEYDOWN:
+                        HandleKeyInput(&event);
+                        break;
+                    case SDL_MOUSEBUTTONUP:
+                    case SDL_MOUSEBUTTONDOWN:
+                        HandleMouseButtonInput(&event);
+                        break;
+                    case SDL_MOUSEMOTION:
+                        HandleMouseMovementInput(&event);
+                        break;
+                    case SDL_MOUSEWHEEL:
+                        HandleMouseWheelInput(&event);
+                        break;
+                    case SDL_TEXTINPUT:
+                        HandleTextInput(&event);
+                        break;
+                    default: break;
+                }
+            }
+
+            return 0;
+        }
+        case 0x00001000: {
+            // Enable SWI Error Feedback.
+            uint32_t pErrorBuffer = POP(uint32_t, ctx);
+            if (pErrorBuffer == 0) {
+                swi_ErrorBuffer = NULL;
+                return 0;
+            }
+
+            swi_ErrorBuffer = (char*)(ctx->Memory.memory_begin + pErrorBuffer);
+            return 1;
+        }
         case 0x0000A000:
             struct timespec ts;
             clock_gettime(CLOCK_REALTIME, &ts);
@@ -266,9 +493,6 @@ uint32_t swi_handler(void* context, uint32_t code) {
             putc(ctx->PU.gp32[REG_RA].full, stdout);
             break;
         }
-        default:
-            printf("Unknown syscode: 0x%08X (%u)\n", code, code);
-            break;
     }
 
     return 0;

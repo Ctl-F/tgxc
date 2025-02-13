@@ -107,7 +107,7 @@ void GraphicsTriggerError(GraphicsThread* gu, uint8_t code) {
     static bool s_WarningDiplayed = false;
     if (gu->error_buffer_begin == NULL) {
         if (!s_WarningDiplayed){
-            printf("Warning! Graphics error has been triggered but error have not been configured by the host program.");
+            printf("Warning! Graphics error has been triggered but error have not been configured by the host program.\n");
             s_WarningDiplayed = true;
         }
         return;
@@ -239,19 +239,29 @@ int GraphicsMain(void* arg) {
                     break;
                 }
                 case 0x00000007: {
-                    uint8_t* result = (uint8_t*)(gu->memory_begin + buffer->param_buffer_begin);
-
-                    SDL_Event event;
-                    while (SDL_PollEvent(&event)) {
-                        switch (event.type) {
-                            default:
-                                break;
-
-                            case SDL_QUIT:
-                                *result = 1;
-                                break;
-                        }
+                    gu->error_buffer_cursor = gu->error_buffer_begin;
+                    break;
+                }
+                case 0x00000008: {
+                    if (gu->context.window == NULL) {
+                        GraphicsTriggerError(gu, GPU_ERR_NULL_DISPLAY);
+                        break;
                     }
+                    // Fill rect: pRect, pColorRGB
+                    //uint32_t* pParams = gu->memory_begin + buffer->param_buffer_begin;
+                    uint32_t pRect = buffer->param_buffer_begin;
+                    uint32_t pColor = buffer->param_buffer_end;
+
+                    uint32_t *uRect = gu->memory_begin + pRect;
+                    uint8_t *uColor = gu->memory_begin + pColor;
+
+                    SDL_Rect rect;
+                    rect.x = (int)uRect[0];
+                    rect.y = (int)uRect[1];
+                    rect.w = (int)uRect[2];
+                    rect.h = (int)uRect[3];
+
+                    SDL_FillRect(gu->context.appsurf, &rect, SDL_MapRGB(gu->context.appsurf->format, uColor[0], uColor[1], uColor[2]));
                     break;
                 }
             }
@@ -590,7 +600,7 @@ int program_thread_exec(TGXContext* sys){
     TGX_CASE(MOVTBL_R32_IC8):
     TGX_PROFILE_CALL(MOVTBL_R32_IC8, 0x0007);
 
-    sys->PU.int_table[instruction.ext_params[0]] = REG32(sys, instruction.params[1]);
+    sys->PU.int_table[instruction.ext_params[0]] = REG32(sys, instruction.params[0]);
 
     TGX_PROFILE_END(MOVTBL_R32_IC8, 0x0007);
     TGX_NEXT_INSTR(*sys);

@@ -644,7 +644,7 @@ uint32_t get_param_type(CompilerContext& ctx, string_view view, NumberLiteral& l
     if (streq(view.begin, "i64", 3)) {
         return PARAM_TYPE_Size64;
     }
-    if (streq(view.begin, "tbl", 4)) {
+    if (streq(view.begin, "tbl", 3)) {
         return PARAM_TYPE_Table;
     }
 
@@ -765,6 +765,11 @@ uint32_t parse_param_ids(CompilerContext& ctx, Instruction& instr, std::vector<s
         if ((*param.begin == '+' || *param.begin == '-') && param.end <= param.begin) {
             param.end += 2;
         }
+
+        if (param.end < param.begin) {
+            throw std::runtime_error(get_error_location() + " Unexpected ','");
+        }
+
         std::string debug_str{param.begin, param.end};
 
         params.push_back(param);
@@ -842,7 +847,7 @@ bool read_and_emit_instruction(CompilerContext& ctx) {
 
     Command cmd = get_command(ctx.input);
     if (cmd == Command::Undefined) {
-        throw std::runtime_error("Undefined command");
+        throw std::runtime_error("Undefined command: (" + std::string(ctx.input).substr(0, 5) + ")");
     }
     std::string& cmdName = s_CommandNames.at(cmd);
     Instruction& i = ctx.program_section.emplace_back();
@@ -1440,9 +1445,11 @@ int main(int argc, char **argv) {
         std::cerr << err.what() << "\n";
         return 1;
     }
-
-    //std::cout << output << "\n";
-
+    {
+        std::ofstream interm(s_CurrentFile.begin + std::string(".inter.asm"));
+        interm << output;
+        interm.close();
+    }
     try {
         CompilerContext ctx{0};
         ctx.input = output.c_str();

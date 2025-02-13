@@ -227,6 +227,13 @@ typedef struct {
 #define GPU_ERR_REINIT 0x04
 #define GPU_ERR_UNKNOWN_CMD 0x05
 
+#define SWI_ErrorNone 0x00000000
+#define SWI_ErrorInvalidInputMode 0x00000001
+#define SWI_ErrorInvalidInputHostMode 0x00000002
+#define SWI_ErrorInvalidSysCode 0x00000003
+
+#define INPUT_SCAN_CODE_END 231
+
 typedef struct {
 
 	GraphicsContext context;
