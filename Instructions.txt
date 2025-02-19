@@ -517,7 +517,7 @@ TODO: Implement graphics API
 
 // NOTE THAT This has become obsolete, all movs are now raw moves for performance reasons
 0x011E      GQPE                Graphics Queue Poll Error (if there is an error the PF will be updated and the error code popped off the error stack into RAS. Error handling needs to have been enabled)
-
+0x011F      GQAWAIT
 
 ------- Graphics Unit ---------
 The Graphics Unit can read memory from the Graphics Cache and the ROM. It can write only to the Graphics Cache

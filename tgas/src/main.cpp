@@ -663,7 +663,7 @@ uint32_t get_param_type(CompilerContext& ctx, string_view view, NumberLiteral& l
                     case 1: return PARAM_TYPE_R8;
                     case 2: return PARAM_TYPE_R16;
                     case 4: {
-                        if (*str.rbegin() == 'l') {
+                        if (*str.rbegin() == 'l' && str.length() > 2) {
                             return PARAM_TYPE_R64L;
                         }
                         if (*str.rbegin() == 'h') {
@@ -675,8 +675,10 @@ uint32_t get_param_type(CompilerContext& ctx, string_view view, NumberLiteral& l
                     default: throw std::runtime_error(get_error_location() + "Invalid register width");
                 }
             case Type::Float:
+                literal.uint_val = rinfo.emitID;
                 return PARAM_TYPE_F32;
             case Type::Vec:
+                literal.uint_val = rinfo.emitID;
                 return PARAM_TYPE_RVec;
             default:
                 throw std::runtime_error(get_error_location() + "Invalid register type");
@@ -760,7 +762,7 @@ uint32_t parse_param_ids(CompilerContext& ctx, Instruction& instr, std::vector<s
         while (ch && ch != ',' && ch != '\n' && ch != ' ' && ch != '\t' && ch != '\r' && ch != ';' && ch != '+' && ch != '-') {
             ch = *(param.end++);
         }
-        param.end--;
+         param.end--;
 
         if ((*param.begin == '+' || *param.begin == '-') && param.end <= param.begin) {
             param.end += 2;
@@ -821,6 +823,10 @@ uint32_t parse_param_ids(CompilerContext& ctx, Instruction& instr, std::vector<s
                 }
                 break;
             case PARAM_TYPE_Imm:
+                if (immediate.is_float) {
+                    instr.const_f32 = immediate.float_val;
+                    break;
+                }
                 instr.const_i32 = static_cast<uint32_t>(immediate.uint_val);
                 break;
         }
@@ -1535,9 +1541,29 @@ std::string preprocess_input(const char *filename) {
         throw std::runtime_error("Preprocessing failed with an error.");
     }
 
+
+    bool inString = false;
+    bool inComment = false;
+    bool escaped = false;
     for (size_t i=0; i<bytes.size(); i++) {
-        if (bytes[i] == '|') {
+        if (bytes[i] == '|' && !inString && !inComment) {
             bytes[i] = '\n';
+        }
+        if (bytes[i] == '\\' && inString && !escaped) {
+            escaped = true;
+        }
+        else {
+            escaped = false;
+        }
+
+        if (bytes[i] == '"' && !escaped && !inComment) {
+            inString = !inString;
+        }
+        if (bytes[i] == ';') {
+            inComment = true;
+        }
+        if (bytes[i] == '\n' && inComment) {
+            inComment = false;
         }
     }
 

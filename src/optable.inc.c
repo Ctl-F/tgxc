@@ -1,7 +1,7 @@
 #ifdef INCLUDE_DATA_TABLE
 typedef struct { uint16_t opcode; uint32_t param_id; const char* name; } Mnemonic;
 
-#define DISASSEMBLER_TABLE_LEN 279
+#define DISASSEMBLER_TABLE_LEN 280
 static Mnemonic s_DisassemblerTable[] = {
     (Mnemonic){ .opcode = 0x0000, .param_id = 0, .name = "nop" },
     (Mnemonic){ .opcode = 0x0001, .param_id = 17, .name = "mov" },
@@ -282,6 +282,7 @@ static Mnemonic s_DisassemblerTable[] = {
     (Mnemonic){ .opcode = 0x011C, .param_id = 0, .name = "gqpc" },
     (Mnemonic){ .opcode = 0x011D, .param_id = 0, .name = "gqpf" },
     (Mnemonic){ .opcode = 0x011E, .param_id = 0, .name = "gqpe" },
+    (Mnemonic){ .opcode = 0x011F, .param_id = 0, .name = "gqawait" },
 };
 
 static Mnemonic* SearchOpCode(uint16_t opcode){

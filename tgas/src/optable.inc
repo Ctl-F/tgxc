@@ -1,10 +1,10 @@
 #ifdef INCLUDE_DATA_TABLE
 enum class Command { Undefined, 
 Nop,
-Mov,
 Movc,
 Movia,
 Movda,
+Mov,
 Swap,
 Mcpy,
 Mcmp,
@@ -82,6 +82,7 @@ Gqr,
 Gqpc,
 Gqpf,
 Gqpe,
+Gqawait,
 Trace,
 };
 #define PARAM_TYPE_MASK 0b1111
@@ -120,6 +121,19 @@ struct TableEntry { uint16_t opcode; InstructionHandler handler; };
 
 static std::unordered_map<uint32_t, TableEntry> nop_ParamTable {
     { 0x0000, TableEntry{ 0x0000, nullptr } }, /*  */
+};
+
+static std::unordered_map<uint32_t, TableEntry> movc_ParamTable {
+    { 0x0017, TableEntry{ 0x0017, nullptr } }, /* R32, F32 */
+    { 0x0071, TableEntry{ 0x0019, nullptr } }, /* F32, R32 */
+};
+
+static std::unordered_map<uint32_t, TableEntry> movia_ParamTable {
+    { 0x0AAB, TableEntry{ 0x0025, nullptr } }, /* DeR32, DeR32, Imm */
+};
+
+static std::unordered_map<uint32_t, TableEntry> movda_ParamTable {
+    { 0x0AAB, TableEntry{ 0x0026, nullptr } }, /* DeR32, DeR32, Imm */
 };
 
 static std::unordered_map<uint32_t, TableEntry> mov_ParamTable {
@@ -176,19 +190,6 @@ static std::unordered_map<uint32_t, TableEntry> mov_ParamTable {
     { 0xAD13, TableEntry{ 0x0101, nullptr } }, /* DeR32, Size16, R32, R8 */
     { 0xAD14, TableEntry{ 0x0104, nullptr } }, /* DeR32, Size16, R32, R64 */
     { 0xAD17, TableEntry{ 0x0105, nullptr } }, /* DeR32, Size16, R32, F32 */
-};
-
-static std::unordered_map<uint32_t, TableEntry> movc_ParamTable {
-    { 0x0017, TableEntry{ 0x0017, nullptr } }, /* R32, F32 */
-    { 0x0071, TableEntry{ 0x0019, nullptr } }, /* F32, R32 */
-};
-
-static std::unordered_map<uint32_t, TableEntry> movia_ParamTable {
-    { 0x0AAB, TableEntry{ 0x0025, nullptr } }, /* DeR32, DeR32, Imm */
-};
-
-static std::unordered_map<uint32_t, TableEntry> movda_ParamTable {
-    { 0x0AAB, TableEntry{ 0x0026, nullptr } }, /* DeR32, DeR32, Imm */
 };
 
 static std::unordered_map<uint32_t, TableEntry> swap_ParamTable {
@@ -755,16 +756,20 @@ static std::unordered_map<uint32_t, TableEntry> gqpe_ParamTable {
     { 0x0000, TableEntry{ 0x011E, nullptr } }, /*  */
 };
 
+static std::unordered_map<uint32_t, TableEntry> gqawait_ParamTable {
+    { 0x0000, TableEntry{ 0x011F, nullptr } }, /*  */
+};
+
 static std::unordered_map<uint32_t, TableEntry> trace_ParamTable {
     { 0x000B, TableEntry{ 0x00A1, nullptr } }, /* Imm */
 };
 
 static std::unordered_map<std::string, std::unordered_map<uint32_t, TableEntry>*> TableMap {
  { "nop", &nop_ParamTable },
- { "mov", &mov_ParamTable },
  { "movc", &movc_ParamTable },
  { "movia", &movia_ParamTable },
  { "movda", &movda_ParamTable },
+ { "mov", &mov_ParamTable },
  { "swap", &swap_ParamTable },
  { "mcpy", &mcpy_ParamTable },
  { "mcmp", &mcmp_ParamTable },
@@ -842,12 +847,13 @@ static std::unordered_map<std::string, std::unordered_map<uint32_t, TableEntry>*
  { "gqpc", &gqpc_ParamTable },
  { "gqpf", &gqpf_ParamTable },
  { "gqpe", &gqpe_ParamTable },
+ { "gqawait", &gqawait_ParamTable },
  { "trace", &trace_ParamTable },
 };
 
 static std::unordered_map<char, std::vector<std::string>> s_Commands = {
     { 'n', { "nop", "neg", "not" } },
-    { 'm', { "mov", "movc", "movia", "movda", "mcpy", "mcmp", "mclr", "mul", "mod" } },
+    { 'm', { "movc", "movia", "movda", "mov", "mcpy", "mcmp", "mclr", "mul", "mod" } },
     { 's', { "swap", "sub", "sqr", "sqrt", "sin", "syscall" } },
     { 'p', { "push", "pop", "pow" } },
     { 't', { "tsto", "tld", "tan", "trace" } },
@@ -865,14 +871,14 @@ static std::unordered_map<char, std::vector<std::string>> s_Commands = {
     { 'e', { "epow" } },
     { 'j', { "jmp", "jz", "jnz", "jgt", "jlt", "jge", "jle" } },
     { 'h', { "hlt" } },
-    { 'g', { "gqps", "gqsi", "gqs", "gqai", "gqr", "gqpc", "gqpf", "gqpe" } },
+    { 'g', { "gqps", "gqsi", "gqs", "gqai", "gqr", "gqpc", "gqpf", "gqpe", "gqawait" } },
 };
 static std::unordered_map<std::string, Command> s_CommandIDs = {
  { "nop", Command::Nop }, 
- { "mov", Command::Mov }, 
  { "movc", Command::Movc }, 
  { "movia", Command::Movia }, 
  { "movda", Command::Movda }, 
+ { "mov", Command::Mov }, 
  { "swap", Command::Swap }, 
  { "mcpy", Command::Mcpy }, 
  { "mcmp", Command::Mcmp }, 
@@ -950,14 +956,15 @@ static std::unordered_map<std::string, Command> s_CommandIDs = {
  { "gqpc", Command::Gqpc }, 
  { "gqpf", Command::Gqpf }, 
  { "gqpe", Command::Gqpe }, 
+ { "gqawait", Command::Gqawait }, 
  { "trace", Command::Trace }, 
 };
 static std::unordered_map<Command, std::string> s_CommandNames = {
  { Command::Nop, "nop" }, 
- { Command::Mov, "mov" }, 
  { Command::Movc, "movc" }, 
  { Command::Movia, "movia" }, 
  { Command::Movda, "movda" }, 
+ { Command::Mov, "mov" }, 
  { Command::Swap, "swap" }, 
  { Command::Mcpy, "mcpy" }, 
  { Command::Mcmp, "mcmp" }, 
@@ -1035,6 +1042,7 @@ static std::unordered_map<Command, std::string> s_CommandNames = {
  { Command::Gqpc, "gqpc" }, 
  { Command::Gqpf, "gqpf" }, 
  { Command::Gqpe, "gqpe" }, 
+ { Command::Gqawait, "gqawait" }, 
  { Command::Trace, "trace" }, 
 };
 #endif //INCLUDE_DATA_TABLE

@@ -70,27 +70,19 @@ int main(int argc, char** argv) {
             break;
         }
 
-        printf("Signaling Graphics Shutdown...");
+        printf("Shutting down\n");
 
         context.GU.shutdown_flag = true;
         TriggerGraphics(&context.GU);
         SDL_WaitThread(context.GU.thread, NULL);
 
-        printf("done.\n");
-
-        SDL_DestroyMutex(context.GU.mutex);
-        SDL_DestroyCond(context.GU.cond);
-
-        printf("Shutting down\n");
+        SDL_DestroySemaphore(context.GU.cpu_signal_gpu);
+        SDL_DestroySemaphore(context.GU.gpu_signal_finished);
 
         if (context.ExitCode == TGX_EXIT_CODE_RESTART) {
             free_principle_memory(&context.Memory);
             destroy_graphics_thread(&context.GU);
             destroy_program_thread(&context.PU);
-
-            /*context.GU.shutdown_flag = false;
-            context.ExitCode = TGX_EXIT_CODE_NONE;
-            */
 
             context = (TGXContext){0};
 
@@ -192,7 +184,7 @@ void HandleKeyInput(SDL_Event* event) {
         case 2: // Keyboard Mapped Input
         {
             uint32_t *keyboard_map = (uint32_t*)s_InputController.DirectInput.mapping_buffer;
-            uint32_t *result_buffer = (uint32_t*)s_InputController.DirectInput.result_buffer;
+            uint8_t *result_buffer = (uint8_t*)s_InputController.DirectInput.result_buffer;
 
             for (int i=0; i<10; i++) {
                 if (event->key.keysym.scancode == keyboard_map[i]) {
@@ -304,7 +296,8 @@ uint32_t swi_handler(void* context, uint32_t code) {
             s_InputController.DirectInput.result_buffer = ctx->Memory.memory_begin + pDataBuffer;
             s_InputController.DirectInput.mapping_buffer = NULL;
             if (mode == 2) {
-                s_InputController.DirectInput.mapping_buffer = ctx->Memory.memory_begin + POP(uint32_t, ctx);
+                uint32_t pMappingBuffer = POP(uint32_t, ctx);
+                s_InputController.DirectInput.mapping_buffer = ctx->Memory.memory_begin + pMappingBuffer;
             }
             return 1;
         }
@@ -427,9 +420,10 @@ uint32_t swi_handler(void* context, uint32_t code) {
                             break;
                         }
                         case 's': {
-                            const char* str = (const char*)(ctx->Memory.memory_begin + ctx->PU.gp32[REG_SP].full);
+                            uint32_t vPtr = *(uint32_t*)(ctx->Memory.memory_begin + ctx->PU.gp32[REG_SP].full);
+                            const char* _str = (const char*)(ctx->Memory.memory_begin + vPtr);
                             ctx->PU.gp32[REG_SP].full += sizeof(uint32_t);
-                            printf("%s", str);
+                            printf("%s", _str);
                             break;
                         }
                         case 'l': {
@@ -481,12 +475,11 @@ uint32_t swi_handler(void* context, uint32_t code) {
         case 0xF0000004: {
             // scanf --> stores result directly into RA
             scanf("%d", &ctx->PU.gp32[REG_RA].full);
-            break;
+            return ctx->PU.gp32[REG_RA].full;
         }
         case 0xF0000005: {
             // getchar --> RA
-            ctx->PU.gp32[REG_RA].full = getchar();
-            break;
+            return ctx->PU.gp32[REG_RA].full = getchar();
         }
         case 0xF0000006: {
             // putc (RA)

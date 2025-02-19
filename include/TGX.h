@@ -146,6 +146,7 @@
 #define TGX_PF_Flag_NegBit       0x00000800
 #define TGX_PF_Flag_GraphicsFree 0x00001000
 
+
 #define TGX_PF_Shift_ErrorBit 8
 #define TGX_PF_Shift_SysActiveBit 9
 #define TGX_PF_Shift_ZeroBit 10
@@ -156,7 +157,7 @@
 #define TGX_JMP_USE_REG_FLAG 0x01
 
 // UPDATE THIS IF ANY NEW INSTRUCTIONS ARE ADDED!!!!!
-#define TGX_OPCODE_COUNT 0x011F
+#define TGX_OPCODE_COUNT 0x0120
 
 #define TGX_EXIT_CODE_NONE 0
 #define TGX_EXIT_CODE_RESTART 65535
@@ -248,10 +249,12 @@ typedef struct {
 	void* error_buffer_end;
 	void* error_buffer_cursor;
 	void* memory_begin;
-	bool ready;
 	bool shutdown_flag;
-	SDL_mutex* mutex;
-	SDL_cond* cond;
+
+	SDL_atomic_t inactive;
+
+	SDL_sem* cpu_signal_gpu;
+	SDL_sem* gpu_signal_finished;
 	SDL_Thread* thread;
 } GraphicsThread;
 

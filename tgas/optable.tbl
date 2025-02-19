@@ -19,6 +19,12 @@ Size64
 %end
 
 nop > 0x0000
+
+movc R32 F32 > 0x0017
+movc F32 R32 > 0x0019
+movia DeR32 DeR32 Imm > 0x0025
+movda DeR32 DeR32 Imm > 0x0026
+
 mov R32 R32 > 0x0001
 mov R16 R16 > 0x0002
 mov R8 R8 > 0x0003
@@ -49,9 +55,9 @@ mov R64 Imm > 0x0012, HandleMovConst48
 mov F32 F32 > 0x0014
 mov F32 Imm > 0x0015
 mov R32 F32 > 0x0016
-movc R32 F32 > 0x0017
+
 mov F32 R32 > 0x0018
-movc F32 R32 > 0x0019
+
 mov R32 DeR32 > 0x001A
 mov R8 DeR32 > 0x001B
 mov R16 DeR32 > 0x001C
@@ -63,8 +69,7 @@ mov DeR32 R64 > 0x0021
 mov DeR32 F32 > 0x0022
 mov DeR32 DeR32 Imm > 0x0023
 mov F32 DeR32 > 0x0024
-movia DeR32 DeR32 Imm > 0x0025
-movda DeR32 DeR32 Imm > 0x0026
+
 swap R32 R32 > 0x0027
 swap R8 R8 > 0x0028
 swap R16 R16 > 0x0029
@@ -425,6 +430,7 @@ gqr > 0x011A
 gqpc > 0x011C
 gqpf > 0x011D
 gqpe > 0x011E
+gqawait > 0x011F
 
 trace Imm > 0x00A1
 

@@ -19,7 +19,7 @@ $section data
 
 
 DisplayGameCommandBuffer:
-    i64 0:10
+    i64 0:12
 DisplayGameCommandBufferEnd:
 
 WhiteCol: struct gColorRGB 0
@@ -61,6 +61,7 @@ CPU_IntMessage: str "CPU Interrupt\n";
 
 $section prog
 ENTRY:
+
     mov rx, HANDLE_INT_UNEXPECTED_ERR;
     mov tbl INT_RES_UNEXPECTED_ERROR, rx;
     mov rx, HANDLE_INT_RES_GQ_FULL;
@@ -82,20 +83,29 @@ ENTRY:
     jmp InitBall;
     trace 0x0060;
     jmp InitPaddles;
-
     trace 0x0070;
+
 MainLoop:
     syscall INPUT_CONTROL_POLL;
 
-    trace 0x0075;
+    mov ra, InputBuffer;
+    mov rb, offsetof[ControllerResultBuffer:start];
+    xor rc, rc;
+    mov rcs, [ra]+rb;
+    cmp rcs, 1;
+    jnz NoDebug;
+    break;
+NoDebug:
+
+    ; trace 0x0075;
     ; main logic here
     jmp BallUpdate;
 
     ;; TODO: Update Paddles
-    trace 0x0076;
-    jmp GFXHasError;
+    ; trace 0x0076;
+    ; jmp GFXHasError;
 
-    trace 0x007A;
+    ; trace 0x007A;
     GFX_AWAIT_GPU();
     gqr;
     mov ra, DisplayGameCommandBuffer;
@@ -103,7 +113,7 @@ MainLoop:
     gqsi ra, rb;
     gqs;
 
-    trace 0x007C;
+    ; trace 0x007C;
     xor rc, rc;
     mov ra, HostBuffer;
     mov rb, offsetof[HostResultBuffer:quit_event];
@@ -111,7 +121,7 @@ MainLoop:
     cmp rcs, 1;
     jnz MainLoop;
 MainLoopEnd:
-    trace 0x0080;
+    ; trace 0x0080;
     jmp ShutdownGraphics;
     hlt;
 
@@ -123,7 +133,6 @@ RecordGameCommandBuffer:
     xor m0, m0;
     xor m1, m1;
 
-    break;
 
     mov ra, DisplayGameCommandBuffer;
 
@@ -169,6 +178,12 @@ RecordGameCommandBuffer:
     mov [ra], m1;
     add ra, 8;
 
+    ; present
+    mov rb, GFX_COMMAND_ID_PRESENT;
+    mov m0h, rb;
+    mov [ra], m0;
+    add ra, GFX_INST_SIZE;
+
     ; eof
     mov rb, GFX_COMMAND_ID_EOF;
     mov m0h, rb;
@@ -196,12 +211,15 @@ InitBall:
 
 
     mov rb, BallSpeed;
-    jmp Rand;
-    mod ra, 3;
+    ;jmp Rand;
+    ;mod ra, 3;
+    mov ra, 3;
     mov [rb], ra;
     add rb, 4;
-    jmp Rand;
-    mod ra, 3;
+    ;jmp Rand;
+    ;mod ra, 3;
+    mov ra, 2;
+    neg ra;
     mov [rb], ra;
 
     pop jr;
@@ -285,7 +303,7 @@ SKIP_LEFT_HIT:
     jmp RETURN;
 SKIP_RIGHT_HIT:
     ; check paddles
-    ; TODO
+    ; //TODO Ball isn't moving....why?
 
     ; record ball new position
     mov ra, BallLoc;
@@ -347,12 +365,13 @@ InitializeErrorChecking:
     push jr;
     push ra;
 
-    trace 0x0001;
+    ; trace 0x0001;
 
     push i32 SwiErrCode;
     syscall SYSCALL_ENABLE_ERRORS;
 
-    trace 0x0002;
+    ; trace 0x0002;
+    gqr;
 
     mov ra, GFX_COMMAND_ID_ENABLE_ERRORS;
     mov m0h, ra;
@@ -362,7 +381,7 @@ InitializeErrorChecking:
     mov m1h, rb;
     gqai;
 
-    trace 0x0003;
+    ; trace 0x0003;
 
     mov ra, GFX_COMMAND_ID_EOF;
     mov m0h, ra;
@@ -370,31 +389,32 @@ InitializeErrorChecking:
     gqai;
     gqs;
 
-    trace 0x0004;
+    ; trace 0x0004;
 
     GFX_AWAIT_GPU();
 
-    trace 0x0005;
+    ; trace 0x0005;
     pop ra;
     pop jr;
     ret;
 
 GFXHasError:
     push jr;
-    trace 0xDEAD;
+    ; trace 0xDEAD;
     mov ri, GFX_ErrorStackBeg;
 
 GFXErrorLoopBeg:
-    trace 0xBEEF;
+    ; trace 0xBEEF;
     xor rb, rb;
     mov rbs, [ri];
     cmp rbs, 0;
     jgt GFXErrorLoopDisplay;
 GFXErrorLoopEnd:
-    trace 0xF00B;
+    ; trace 0xF00B;
     ; TODO: Double Buffer the command buffer so we dont need to synchronize on EVERY write.
     GFX_AWAIT_GPU();
 
+    gqr;
     mov ra, GFX_COMMAND_ID_CLEAR_ERRORS
     mov m0h, ra;
     xor m1, m1;
@@ -408,7 +428,7 @@ GFXErrorLoopEnd:
     pop jr;
     ret;
 GFXErrorLoopDisplay:
-    trace 0xB00B;
+    ; trace 0xB00B;
     push rb;
     mov ra, GFX_ErrorMessageFmt;
     syscall DEBUG_SERIAL_PRINTF;
@@ -456,6 +476,7 @@ InitializeInput:
 
     mov rb, offsetof[KeyboardMapping:key_for_start];
     mov rc, PKEY_RETURN;
+    break;
     mov [ra]+rb, rc;
 
     mov rb, offsetof[KeyboardMapping:key_for_select];
@@ -502,6 +523,8 @@ InitializeGraphics:
     push jr;
     push;
 
+    trace 0xFF00;
+
     xor rb, rb;
     mov ra, WhiteCol;
     mov rbs, 255;
@@ -525,12 +548,45 @@ InitializeGraphics:
     mov ras, 75;
     mov [rb]+ri, ras;
 
-    GFX_RECORD_INIT_WINDOW(WindowInitParams);
-    GFX_RECORD_SET_CLEAR_COLOR(WindowClearColor);
-    GFX_RECORD_CLEAR();
-    GFX_RECORD_PRESENT();
-    GFX_RECORD_EOF();
+
+    GFX_AWAIT_GPU();
+
+    gqr;
+
+    xor m1, m1;
+
+    mov ra, GFX_COMMAND_ID_WININIT;
+    mov m0h, ra;
+    mov ra, WindowInitParams;
+    mov m1l, ra;
+    gqai;
+
+    mov ra, GFX_COMMAND_ID_SETCLRC;
+    mov m0h, ra;
+    mov ra, WindowClearColor;
+    mov m1l, ra;
+    gqai;
+
+    mov ra, GFX_COMMAND_ID_CLEAR;
+    mov m0h, ra;
+    xor m1, m1;
+    gqai;
+
+    mov ra, GFX_COMMAND_ID_PRESENT;
+    mov m0h, ra;
+    gqai;
+
+    mov ra, GFX_COMMAND_ID_EOF;
+    mov m0h, ra;
+    gqai;
+
+;     GFX_RECORD_INIT_WINDOW(WindowInitParams);
+;     GFX_RECORD_SET_CLEAR_COLOR(WindowClearColor);
+;     GFX_RECORD_CLEAR();
+;     GFX_RECORD_PRESENT();
+;     GFX_RECORD_EOF();
     gqs;
+
 
     pop;
     pop jr;
@@ -541,10 +597,12 @@ ShutdownGraphics:
     push jr;
     push;
     GFX_AWAIT_GPU();
+
     gqr;
     GFX_RECORD_FREE_WINDOW();
     GFX_RECORD_EOF();
     gqs;
+
     GFX_AWAIT_GPU();
     pop;
     pop jr;
