@@ -35,3 +35,5 @@ target_link_directories(tgxc PUBLIC ${SDL2_LIBRARIES})
 target_link_libraries(tgxc PUBLIC ${SDL2_LIBRARIES} m)
 
 add_subdirectory(tgas)
+
+add_compile_options(-Wall -Wextra -Wpedantic -Werror)

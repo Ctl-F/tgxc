@@ -216,6 +216,7 @@ int GraphicsMain(void* arg) {
                 }
                 case 0x00000002: {
                     SDL_DestroyWindow(gu->context.window);
+                    SDL_Quit();
                     break;
                 }
                 case 0x00000003: {
